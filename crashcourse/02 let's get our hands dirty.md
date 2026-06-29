@@ -309,8 +309,215 @@ After a visual refactor, still check the actual app:
 For frontend work, screenshots are best used as feedback loops: generate, inspect, screenshot, critique, edit, and verify again.
 
 
-## Prompt engineering (Maybe just in the appendix?)
+## Prompt engineering (More in the appendix)
 
+This is not meant to be a full prompt engineering guide. For this workshop, prompt engineering mostly means: shape the task enough that the model can make useful decisions without constantly stopping, guessing wildly, or overengineering the result.
+
+The TinyBI demo already used several practical prompting tricks.
+
+### Prompt engineering can mean prompting for a prompt
+
+The large zero-shot prompt in [`prompts/zeroshot-tinybi.md`](../prompts/zeroshot-tinybi.md) did not appear fully formed. It started from a much smaller meta-prompt:
+
+```text
+give me a prompt for my agent (opencode with gpt 5.5) which attempts to build it all with a single request from start to finish - no user questions
+```
+
+That is also prompt engineering. Instead of writing the final prompt completely by hand, you can ask a model to draft a prompt for another model or agent. The useful part is not blindly trusting that generated prompt. The useful part is using it as a scaffold and then editing it.
+
+In this case, the final TinyBI prompt was tweaked to be more realistic. The original idea said "no user questions", but the final version allows exactly two setup questions: where to create the project and what to call the app. After that, the agent should make reasonable assumptions and continue.
+
+That tradeoff is important. "Never ask questions" sounds efficient, but can force the agent to guess things that are cheap and useful to ask once. A better version is often:
+
+```text
+Ask only these setup questions. After that, make reasonable assumptions and finish the task.
+```
+
+### Tricks used in the TinyBI prompt
+
+- Start with the deliverable:
+
+  ```text
+  Build a complete FastAPI project from scratch in a user-specified directory.
+  ```
+
+  This tells the agent that the task is not a discussion, not a plan, and not a code snippet. The expected output is a working project.
+
+- Give the goal and scope:
+
+  ```text
+  Create a small but polished data analytics dashboard app that can be built and run locally within minutes.
+  ```
+
+  This sets the size of the solution. "Small", "polished", "locally", and "within minutes" all push against unnecessary complexity.
+
+- Control questions and assumptions:
+
+  ```text
+  Limit follow-up questions strictly to these initial setup questions only.
+  Make reasonable assumptions after the initial questions.
+  ```
+
+  This keeps the workflow moving while still collecting the few details that matter.
+
+- Prefer working simplicity:
+
+  ```text
+  Prefer a simple, working, polished app over complexity.
+  ```
+
+  This is one of the highest-value instructions in the prompt. It gives the model a way to resolve tradeoffs.
+
+- Specify the stack:
+
+  ```text
+  Use FastAPI for the backend.
+  Use plain HTML/CSS/JavaScript for the frontend.
+  Use Chart.js via CDN for charts.
+  Use pandas for CSV parsing.
+  Use uv for dependency management instead of pip.
+  ```
+
+  This prevents the agent from inventing a heavier or unfamiliar stack.
+
+- Specify non-goals:
+
+  ```text
+  No database.
+  No authentication.
+  No external backend services.
+  ```
+
+  Non-goals are as important as goals. They cut off common overengineering paths.
+
+- Give the file structure:
+
+  ```text
+  main.py
+  pyproject.toml
+  .gitignore
+  Makefile
+  README.md
+  AGENTS.md
+  templates/index.html
+  static/styles.css
+  static/app.js
+  sample_data.csv
+  ```
+
+  This makes the result easier to inspect and keeps the generated project close to what we expect.
+
+- Describe the user flow:
+
+  ```text
+  1. User opens the homepage.
+  2. User sees a beautiful landing/dashboard page.
+  3. User uploads a CSV file and it is automatically analyzed.
+  ```
+
+  User flow is often more useful than describing individual functions. It tells the model what behavior the files must create together.
+
+- List visible outputs:
+
+  ```text
+  total rows
+  total columns
+  numeric columns detected
+  categorical columns detected
+  CSV preview table
+  chart of values over time
+  3 to 5 plain-English insight cards
+  ```
+
+  This gives the frontend and backend concrete targets.
+
+- Name assumptions and edge cases:
+
+  ```text
+  Handle missing values gracefully.
+  Return useful errors for invalid files or empty CSVs.
+  Do not assume uploaded CSV files or the Kaggle sample CSV are UTF-8 encoded.
+  ```
+
+  This pushes the agent beyond the happy path, but only for cases that matter for the demo.
+
+- Give fallback behavior:
+
+  ```text
+  If the download fails, create a small realistic fallback sample_data.csv and clearly mention the fallback in the final summary.
+  ```
+
+  This is better than letting an external download failure break the whole task.
+
+- Ask for developer ergonomics:
+
+  ```text
+  Include a Makefile with common commands.
+  make serve -> runs uv run uvicorn main:app --reload
+  ```
+
+  For a workshop, this matters. The app should not only exist; it should be easy to run.
+
+- Ask for verification before stopping:
+
+  ```text
+  Run basic checks.
+  Verify imports work.
+  Make sure the app can run with uv run uvicorn main:app --reload or make serve.
+  Fix any obvious bugs before finishing.
+  ```
+
+  This changes the request from "write files" to "deliver something plausibly working".
+
+- End with a clear finish line:
+
+  ```text
+  A complete working local FastAPI app in the user-specified directory. Do not stop after planning. Create the files, implement the app, and provide a concise final summary with run instructions.
+  ```
+
+  This is an anti-stalling instruction. It tells the agent to execute, not just outline.
+
+### Tricks used after generation
+
+The screenshot feedback used a different kind of prompting. It was rough, but grounded:
+
+```text
+[Image 1]
+
+Check out that right blob. It looks stupid with that empty space. Fix it.
+```
+
+Then it added direction:
+
+```text
+Increase the general information density per area
+```
+
+This worked because the screenshot carried context that the text did not need to explain. The prompt did not need to politely describe every pixel. It only needed to point at the visible problem and say what kind of improvement was wanted.
+
+We also used another practical trick in this chapter work: point the agent at existing files instead of restating everything.
+
+```text
+check @local/ideas.md, and @prompts/zeroshot-tinybi.md
+```
+
+That keeps the prompt short while still grounding the response in real project context.
+
+### The pattern
+
+The pattern so far is simple:
+
+- use a small prompt to draft a bigger prompt when useful
+- edit the generated prompt instead of trusting it blindly
+- state the deliverable clearly
+- give constraints and non-goals
+- describe the user flow and visible outputs
+- include edge cases only when they matter
+- ask the agent to verify before stopping
+- use screenshots when visual context is easier than words
+- point to existing files instead of pasting context again
+
+More general prompt engineering belongs in the appendix. For the main workshop, these are the tricks we have actually used.
 
 ## How to Generate
 ### AI as a search engine
