@@ -520,6 +520,40 @@ The pattern so far is simple:
 More general prompt engineering belongs in the appendix. For the main workshop, these are the tricks we have actually used.
 
 ## How to Generate
-### AI as a search engine
+There is not one correct way to use generative AI for coding. In practice, it is more useful to think of it as a spectrum: sometimes the model is doing most of the work, sometimes it is only preparing context, and sometimes it is reviewing something that already exists.
+
 ### YOLO-mode
-### LLM as a judge
+`YOLO-mode` is the extreme end of vibe coding. The term was popularized by Cursor for workflows where an LLM writes code fully autonomously. The developer stops reading most of the code and mainly keeps requesting features, refactors, fixes, and visual changes. The TinyBI zero-shot project was an explicit example of this: one big request, then let the agent build the whole thing from start to finish.
+
+The appeal is obvious. You can move as fast as you can come up with ideas. For throwaway prototypes, this can feel incredible.
+
+The problems become obvious as soon as the AI cannot figure something out. At that point, the developer has to manually understand a codebase they did not really write and may not have read. That can be painful.
+
+Generated code also tends to accumulate inconsistency over time. Models are trained on many different styles, quality levels, design philosophies, and best practices from publicly available code, including a lot of public GitHub. The result can easily become a mix of patterns that do not really belong together. Another common failure mode is dead code: the agent tries one approach, patches around it, hits another problem, adds another workaround, later solves the original problem differently, but does not fully remove the old path.
+
+More intelligent models help, but they do not remove the problem. They mostly push the failure point further away. The codebase may stay coherent for longer, but when it finally becomes too messy, it can be an incomprehensible mess at a larger scale. Eventually, not even the AI can reliably maintain the code anymore.
+
+Common ways to reduce the risk include stricter workflows such as feature-branch workflows, GitFlow-style branching, pull-request review gates, small commits, short-lived branches, and feature-centric development. More structured multi-agent setups can also help by separating roles such as planner, implementer, reviewer, and tester. Those approaches can work, but they also add overhead. Multi-agent setups in particular can become expensive and are a rabbit hole of their own.
+
+There are cases where just-do-it prompts may be appropriate:
+
+- the task is easy to verify and easy to fix
+- the cost of mistakes is negligible or non-existent
+- the output is a placeholder, draft, internal comment, or throwaway artifact
+- the task is genuinely simple
+
+### AI as a search engine
+The opposite extreme is using AI mostly as a search, reading, and context-preparation engine. I do not know of one universally accepted catchy name for this, but the workflow is simple: work roughly as you would without AI, except that the model reads documentation, source files, examples, Stack Overflow threads, blog posts, or issue discussions for you.
+
+Instead of immediately asking it to change code, ask it to collect the relevant context, dump the important information into summaries and plans, explain the tradeoffs, and keep that context available for the next step. The developer still owns the decisions and should still understand the whole change.
+
+This approach is slower than YOLO-mode, but the generated code is usually better and more consistent because the model has read more relevant material before writing. Some people call this kind of deliberate context preparation `context engineering`. We will come back to that idea later when talking about skills.
+
+In my opinion, this is also the best mode when learning a new topic. If the model simply writes the solution, you may get the answer but miss the understanding. If the model helps you read, compare, summarize, and then implement, you can move faster while still learning.
+
+### LLM for review
+`LLM for review` or `LLM as a judge` can mean different things in different contexts. Here, I mean using AI to inspect already existing code or compare already generated outputs.
+
+This mode works well together with the other two. It does not matter whether the code was written by a human, generated in YOLO-mode, or produced after careful context preparation. Once code exists, an LLM can often find weak points, inconsistencies, missing edge cases, unnecessary complexity, or places where the implementation does not match the stated goal.
+
+The suggestions are not automatically correct and are not always worth implementing. Still, they are often worth reading. Especially for a mostly vibe-coded codebase, asking an LLM to review the result can give a first impression of how bad the situation is before you spend your own time reading every file.
