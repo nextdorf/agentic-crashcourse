@@ -100,8 +100,8 @@ def _analyze_bytes(content: bytes, params: dict):
     df = _read_csv(content)
   except pd.errors.EmptyDataError as exc:
     raise HTTPException(status_code=400, detail='The CSV has no readable rows or columns.') from exc
-  except UnicodeDecodeError as exc:
-    raise HTTPException(status_code=400, detail='Could not decode the CSV as text.') from exc
+  except HTTPException:
+    raise
   except Exception as exc:
     raise HTTPException(status_code=400, detail=f'Could not parse CSV: {exc}') from exc
 
@@ -122,7 +122,7 @@ def _analyze_bytes(content: bytes, params: dict):
       raise HTTPException(status_code=400, detail='The filter removed all rows.')
 
   analysis_df, date_columns, numeric_columns, categorical_columns = _detect_columns(df.copy())
-  primary_numeric = params.get('y_column') if params.get('y_column') in numeric_columns else _first(numeric_columns)
+  primary_numeric = params.get('y_column') if params.get('y_column') in numeric_columns else _primary_numeric_column(numeric_columns)
   primary_date = params.get('x_column') if params.get('x_column') in date_columns else _first(date_columns)
   primary_category = params.get('x_column') if params.get('x_column') in categorical_columns else _first(categorical_columns)
   limit = _safe_limit(params.get('limit'))
@@ -175,6 +175,23 @@ def _read_csv(content: bytes):
       last_decode_error = exc
 
   raise HTTPException(status_code=400, detail='Could not decode the CSV as text.') from last_decode_error
+
+
+def _primary_numeric_column(columns):
+  preferred_tokens = ['sales', 'revenue', 'profit', 'amount', 'price', 'cost', 'quantity', 'users', 'count']
+  ignored_tokens = ['id', 'postal', 'zip', 'code']
+
+  for token in preferred_tokens:
+    for column in columns:
+      if token in str(column).lower():
+        return column
+
+  for column in columns:
+    lower_name = str(column).lower()
+    if not any(token in lower_name for token in ignored_tokens):
+      return column
+
+  return _first(columns)
 
 
 def _detect_columns(df: pd.DataFrame):

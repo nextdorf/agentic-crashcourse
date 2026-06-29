@@ -21,9 +21,35 @@
           </div>
         </div>
         <div class="hero-card">
-          <span class="pulse"></span>
-          <strong>No database. No build step.</strong>
-          <p>FastAPI, pandas, and Chart.js keep the app local, readable, and quick to run.</p>
+          <div class="mini-dashboard">
+            <div class="mini-header">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="mini-stat-row">
+              <div>
+                <small>Rows</small>
+                <strong>9,994</strong>
+              </div>
+              <div>
+                <small>Sales</small>
+                <strong>$2.3M</strong>
+              </div>
+            </div>
+            <div class="mini-chart" aria-hidden="true">
+              <span style="height: 38%"></span>
+              <span style="height: 68%"></span>
+              <span style="height: 46%"></span>
+              <span style="height: 82%"></span>
+              <span style="height: 58%"></span>
+              <span style="height: 92%"></span>
+            </div>
+          </div>
+          <div class="hero-card-copy">
+            <strong>No database. No build step.</strong>
+            <p>FastAPI, pandas, and Chart.js keep the app local, readable, and quick to run.</p>
+          </div>
         </div>
       </section>
 
@@ -76,48 +102,52 @@
         </form>
       </section>
 
-      <section class="config-bar">
-        <label><input type="checkbox" data-config="show_metrics" checked> Metrics</label>
-        <label><input type="checkbox" data-config="show_charts" checked> Charts</label>
-        <label><input type="checkbox" data-config="show_insights" checked> Insights</label>
-        <label><input type="checkbox" data-config="show_preview" checked> Preview</label>
-      </section>
+      <div class="run-bar">
+        <section class="config-bar">
+          <label><input type="checkbox" data-config="show_metrics" checked> Metrics</label>
+          <label><input type="checkbox" data-config="show_charts" checked> Charts</label>
+          <label><input type="checkbox" data-config="show_insights" checked> Insights</label>
+          <label><input type="checkbox" data-config="show_preview" checked> Preview</label>
+        </section>
 
-      <div id="status" class="status muted">Load the sample data or upload a CSV to begin.</div>
+        <div id="status" class="status muted">Load the sample data or upload a CSV to begin.</div>
+      </div>
 
-      <section id="metricsSection" class="section hidden">
-        <div class="section-heading">
-          <p class="eyebrow">Overview</p>
-          <h2>Metric cards</h2>
-        </div>
-        <div id="metrics" class="metrics-grid"></div>
-      </section>
+      <div class="dashboard-layout">
+        <section id="metricsSection" class="section hidden">
+          <div class="section-heading">
+            <p class="eyebrow">Overview</p>
+            <h2>Metrics</h2>
+          </div>
+          <div id="metrics" class="metrics-grid"></div>
+        </section>
 
-      <section id="chartsSection" class="section hidden">
-        <div class="section-heading">
-          <p class="eyebrow">Visuals</p>
-          <h2>Charts</h2>
-        </div>
-        <div id="charts" class="charts-grid"></div>
-      </section>
+        <section id="chartsSection" class="section hidden">
+          <div class="section-heading">
+            <p class="eyebrow">Visuals</p>
+            <h2>Charts</h2>
+          </div>
+          <div id="charts" class="charts-grid"></div>
+        </section>
 
-      <section id="insightsSection" class="section hidden">
-        <div class="section-heading">
-          <p class="eyebrow">Narrative</p>
-          <h2>Auto-generated insights</h2>
-        </div>
-        <div id="insights" class="insights-grid"></div>
-      </section>
+        <section id="insightsSection" class="section hidden">
+          <div class="section-heading">
+            <p class="eyebrow">Narrative</p>
+            <h2>Insights</h2>
+          </div>
+          <div id="insights" class="insights-grid"></div>
+        </section>
 
-      <section id="previewSection" class="section hidden">
-        <div class="section-heading">
-          <p class="eyebrow">Rows</p>
-          <h2>CSV preview</h2>
-        </div>
-        <div class="table-wrap">
-          <table id="previewTable"></table>
-        </div>
-      </section>
+        <section id="previewSection" class="section hidden">
+          <div class="section-heading">
+            <p class="eyebrow">Rows</p>
+            <h2>CSV preview</h2>
+          </div>
+          <div class="table-wrap">
+            <table id="previewTable"></table>
+          </div>
+        </section>
+      </div>
     </main>
 
     <script>
