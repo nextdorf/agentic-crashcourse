@@ -1,5 +1,5 @@
 # Let's get our hands dirty
-The purpose of this chapter is mainly to actually use the tools mentioned in the previous chapter and getting a first feel for how working with generative AI looks in praxis.
+The purpose of this chapter is mainly to actually use the tools mentioned in the previous chapter and getting a first feel for how working with generative AI looks in practice.
 
 ## Walks like magic, talks like magic, so it must be ...
 
@@ -19,6 +19,7 @@ Run the reference app:
 
 ```bash
 cd tinybi-reference
+uv sync
 make serve
 ```
 
@@ -557,3 +558,10 @@ In my opinion, this is also the best mode when learning a new topic. If the mode
 This mode works well together with the other two. It does not matter whether the code was written by a human, generated in YOLO-mode, or produced after careful context preparation. Once code exists, an LLM can often find weak points, inconsistencies, missing edge cases, unnecessary complexity, or places where the implementation does not match the stated goal.
 
 The suggestions are not automatically correct and are not always worth implementing. Still, they are often worth reading. Especially for a mostly vibe-coded codebase, asking an LLM to review the result can give a first impression of how bad the situation is before you spend your own time reading every file.
+
+For example, this is the exact request I used:
+```text
+Anaylze the tinybi-reference codebase and write an extensive report on the strong points and weak points and general points relevant for refinment
+```
+
+It led to [TinyBI's Review.md](../tinybi-reference/review.md).
