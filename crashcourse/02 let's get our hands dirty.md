@@ -66,9 +66,6 @@ For the workshop, TinyBI becomes our reference object. We can use it to ask the 
 
 That is the reason for starting with the magic trick. It creates motivation first, then gives us something concrete to analyze for the rest of the chapter.
 
-## Prompt engineering (Maybe just in the appendix?)
-
-
 ## `AGENTS.md` and `opencode.json`
 
 Before asking an agent to work inside a repo, it helps to separate two kinds of setup:
@@ -239,7 +236,80 @@ The practical split is:
 Source docs: [OpenCode rules docs](https://opencode.ai/docs/rules/), [rules docs source](https://github.com/anomalyco/opencode/blob/dev/packages/web/src/content/docs/rules.mdx), and [`/init` prompt source](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/command/template/initialize.txt).
 
 
-## Mutimodal Input - Discussing a screenshot
+## Multimodal Input - Discussing a screenshot
+
+One very practical use of multimodal input is UI feedback. Instead of trying to describe a layout problem from memory, we can show the agent a screenshot and talk about the visible problem directly.
+
+Here is the first TinyBI version after the zero-shot build:
+
+![TinyBI before visual feedback](images/02%20tinybi%20a.png)
+
+The right side of the hero section had a large empty card. I did not need a carefully polished design brief to point that out. The screenshot made the problem obvious.
+
+```text
+[Image 1] 
+
+Check out that right blob. It looks stupid with that empty space. Fix it.
+
+...
+
+Can you maybe give the entire page a visual refactor and make it all look just better. For example, having to scroll so much between the interesting stuff (like the input and the plots) sucks. Increase the general information density per area
+```
+
+The result after the agent applied the request:
+
+![TinyBI after visual feedback](images/02%20tinybi%20b.png)
+
+This is not magic in the sense that the model suddenly became a designer. It is useful because the screenshot removes ambiguity. The model can see what we mean by:
+
+- "that right blob"
+- too much empty space
+- too much scrolling before charts appear
+- low information density
+- the important parts being too far apart
+
+This is often faster than writing a long verbal UI critique. It also lets us be casual. The prompt above is not especially professional, but it is grounded in a concrete image, so the agent has enough context to make a reasonable edit.
+
+Good screenshot feedback usually combines three things:
+
+- the image itself
+- a direct observation about what looks wrong
+- a concrete direction for the change
+
+For example:
+
+```text
+[Screenshot]
+
+The upload area and the charts are too far apart. Reduce vertical spacing, make the first dashboard results visible above the fold, and keep the page readable on a laptop screen.
+```
+
+Or:
+
+```text
+[Screenshot]
+
+The top-right card looks decorative but does not communicate anything. Either remove it or turn it into a useful summary card with real dashboard information.
+```
+
+The main trap is that visual feedback can make the agent optimize for the screenshot instead of the product. Text is still where LLMs are strongest. Even powerful multimodal models are usually much further away from human-level understanding of images than they are from human-level understanding of text, so expectations should be adjusted accordingly.
+
+There is also a tooling problem. While editing files, the model usually does not see the page changing live. It reads the code, changes the code, and has to "imagine" the visual result from those edits. A more advanced setup can close this loop with browser automation, MCPs, screenshots, or custom skills, but the default workflow is still much more limited than a human looking at the page while changing CSS.
+
+The same is true for UX and visual taste. An LLM has no real sense of style, taste, or tastefully navigating a page like a human does. It has seen many examples of nice interfaces and can imitate patterns from them, but it does not feel whether a page is elegant, cramped, boring, confusing, cheap-looking, or pleasant to use. In my experience so far, asking for "good UI/UX" without clear direction often produces generic design slop: technically cleaner than before, but not necessarily actually good. Clear instructions about what matters on the page are still necessary.
+
+After a visual refactor, still check the actual app:
+
+- Does it work at different screen sizes?
+- Did any interaction break?
+- Are charts, forms, and error states still readable?
+- Did the agent only improve the visible viewport while ignoring the rest of the page?
+- Did it add unnecessary complexity just to make the screenshot prettier?
+
+For frontend work, screenshots are best used as feedback loops: generate, inspect, screenshot, critique, edit, and verify again.
+
+
+## Prompt engineering (Maybe just in the appendix?)
 
 
 ## How to Generate
