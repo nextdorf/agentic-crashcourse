@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ app_name }} | CSV Analytics Dashboard</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Instant CSV intelligence</p>
+          <h1>{{ app_name }}</h1>
+          <p class="lede">Upload a CSV and get metrics, charts, a preview table, and plain-English insights in seconds.</p>
+          <div class="hero-actions">
+            <button id="sampleBtn" class="button primary">Load sample data</button>
+            <a class="button ghost" href="/sample-data?download=true">Download sample CSV</a>
+          </div>
+        </div>
+        <div class="hero-card">
+          <span class="pulse"></span>
+          <strong>No database. No build step.</strong>
+          <p>FastAPI, pandas, and Chart.js keep the app local, readable, and quick to run.</p>
+        </div>
+      </section>
+
+      <section class="panel uploader-panel">
+        <div id="dropZone" class="drop-zone">
+          <input id="fileInput" type="file" accept=".csv,text/csv">
+          <div class="drop-copy">
+            <span class="upload-icon">CSV</span>
+            <h2>Drop your CSV here</h2>
+            <p>or click to choose a file. TinyBI auto-detects dates, numeric metrics, and categories.</p>
+          </div>
+        </div>
+
+        <form id="controls" class="controls">
+          <label>
+            Filter query
+            <input name="filter_query" placeholder="region == 'West'">
+          </label>
+          <label>
+            X column
+            <input name="x_column" placeholder="date or category">
+          </label>
+          <label>
+            Y column
+            <input name="y_column" placeholder="revenue">
+          </label>
+          <label>
+            Aggregation
+            <select name="aggregation">
+              <option value="sum">sum</option>
+              <option value="mean">mean</option>
+              <option value="median">median</option>
+              <option value="min">min</option>
+              <option value="max">max</option>
+              <option value="count">count</option>
+            </select>
+          </label>
+          <label>
+            Chart type
+            <select name="chart_type">
+              <option value="auto">auto</option>
+              <option value="bar">bar</option>
+              <option value="line">line</option>
+            </select>
+          </label>
+          <label>
+            Limit
+            <input name="limit" type="number" value="20" min="5" max="50">
+          </label>
+        </form>
+      </section>
+
+      <section class="config-bar">
+        <label><input type="checkbox" data-config="show_metrics" checked> Metrics</label>
+        <label><input type="checkbox" data-config="show_charts" checked> Charts</label>
+        <label><input type="checkbox" data-config="show_insights" checked> Insights</label>
+        <label><input type="checkbox" data-config="show_preview" checked> Preview</label>
+      </section>
+
+      <div id="status" class="status muted">Load the sample data or upload a CSV to begin.</div>
+
+      <section id="metricsSection" class="section hidden">
+        <div class="section-heading">
+          <p class="eyebrow">Overview</p>
+          <h2>Metric cards</h2>
+        </div>
+        <div id="metrics" class="metrics-grid"></div>
+      </section>
+
+      <section id="chartsSection" class="section hidden">
+        <div class="section-heading">
+          <p class="eyebrow">Visuals</p>
+          <h2>Charts</h2>
+        </div>
+        <div id="charts" class="charts-grid"></div>
+      </section>
+
+      <section id="insightsSection" class="section hidden">
+        <div class="section-heading">
+          <p class="eyebrow">Narrative</p>
+          <h2>Auto-generated insights</h2>
+        </div>
+        <div id="insights" class="insights-grid"></div>
+      </section>
+
+      <section id="previewSection" class="section hidden">
+        <div class="section-heading">
+          <p class="eyebrow">Rows</p>
+          <h2>CSV preview</h2>
+        </div>
+        <div class="table-wrap">
+          <table id="previewTable"></table>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      window.initialConfig = {{ config | tojson }};
+    </script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

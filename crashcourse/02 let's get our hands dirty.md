@@ -3,6 +3,68 @@ The purpose of this chapter is mainly to actually use the tools mentioned in the
 
 ## Walks like magic, talks like magic, so it must be ...
 
+We start with the fun version first: one large prompt, no careful step-by-step planning, and a complete generated app at the end.
+
+The prompt is in [`prompts/zeroshot-tinybi.md`](../prompts/zeroshot-tinybi.md). It asks the agent to build **TinyBI**, a small local FastAPI dashboard for CSV files. The generated reference project lives in [`tinybi-reference/`](../tinybi-reference/).
+
+The live demo is intentionally simple:
+
+1. Show the prompt.
+2. Point out that it asks for a complete project, not just a code snippet.
+3. Run the generated app.
+4. Upload or load sample CSV data.
+5. Use the resulting UI as material for the next topics.
+
+Run the reference app:
+
+```bash
+cd tinybi-reference
+make serve
+```
+
+Then open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+From the outside this looks like magic. One prompt produced a project with:
+
+- a FastAPI backend
+- a plain HTML/CSS/JavaScript frontend
+- pandas CSV parsing
+- Chart.js visualizations
+- sample data support
+- a README
+- a Makefile
+- a `.gitignore`
+- an `AGENTS.md`
+- basic verification before stopping
+
+The important lesson is not that the generated app is perfect. The important lesson is that the prompt gives the model enough structure to make many small decisions without asking us every time.
+
+The prompt works because it describes more than the desired output. It also describes the working conditions:
+
+- goal: build a small polished CSV analytics dashboard
+- stack: FastAPI, pandas, plain frontend code, Chart.js, `uv`
+- project shape: expected files and directories
+- user flow: open page, upload CSV, see dashboard
+- data assumptions: date, numeric, categorical, missing values, encodings
+- non-goals: no database, no authentication, no external backend services
+- operations: include `make serve`, `uv sync`, and run basic checks
+- finish line: create the files, verify the app, and summarize how to run it
+
+This is a useful pattern for prototypes, internal tools, learning projects, and throwaway demos. If the task is bounded and the prompt is concrete, zero-shot generation can get you surprisingly far.
+
+But this is also where the trap starts. After the magic moment, the generated code is now your code. If you do not understand the project structure, dependencies, endpoints, assumptions, and failure modes, you can end up with an app that works once but is hard to change or debug.
+
+For the workshop, TinyBI becomes our reference object. We can use it to ask the questions that matter after the first impressive generation:
+
+- What made the prompt work?
+- What parts of the prompt were probably over-specified?
+- What did the agent decide on its own?
+- What would we need to inspect before trusting the result?
+- How would we improve the UI from a screenshot?
+- How would we add a feature without losing control of the codebase?
+- How would we compare this output to another generated version?
+
+That is the reason for starting with the magic trick. It creates motivation first, then gives us something concrete to analyze for the rest of the chapter.
 
 ## Prompt engineering (Maybe just in the appendix?)
 

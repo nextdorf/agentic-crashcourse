@@ -4,5 +4,5 @@ A small introductory crash course/workshop into generative AI for Data Engineers
 
 ## Table Of Contents
 
-- [Setup](crashcourse/00%20setup.md)
-- [Let's get our hands dirty](crashcourse/02%20let%27s%20get%20our%20hands%20dirty.md)
+- [0) Setup](crashcourse/00%20setup.md)
+- [2) Let's get our hands dirty](crashcourse/02%20let%27s%20get%20our%20hands%20dirty.md)
