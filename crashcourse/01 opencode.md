@@ -15,7 +15,7 @@ The basic workflow is always the same:
 The provider and access method matter. They determine which models you can use, how much they cost, where your prompts and code are processed, which limits apply, and whether a subscription may legally be used from OpenCode.
 
 ### Connect to Codex via OAuth
-The workshop does not require OpenCode, Codex CLI, or any paid plan. Local models, free providers, and other coding agents can all follow the same workflows, although their commands and results will differ. **Do not buy another AI subscription just to complete this course.**
+The workshop does not require OpenCode, Codex CLI, or any paid plan. Local models, free providers, and other coding agents can all follow the same workflows, although their commands and results will differ. **Do not buy another AI subscription just to complete this workshop.**
 
 - If you already pay for Claude, use Claude Code. If you use Google's free consumer tier, Google AI Pro, or Google AI Ultra, use Antigravity CLI. Gemini CLI now serves Code Assist Standard or Enterprise organizations and users with paid Gemini API or Vertex AI access.
 - If you already pay for ChatGPT, use Codex CLI or connect that subscription to OpenCode.
