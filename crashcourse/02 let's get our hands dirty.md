@@ -1,5 +1,5 @@
 # Let's get our hands dirty
-The purpose of this chapter is mainly to actually use the tools mentioned in the previous chapter and getting a first feel for how working with generative AI looks in practice.
+This chapter puts the tools from the previous chapter to work and gives you a first feel for what working with generative AI looks like in practice.
 
 ## Walks like magic, talks like magic, so it must be ...
 
@@ -7,13 +7,12 @@ We start with the fun version first: one large prompt, no careful step-by-step p
 
 The prompt is in [`prompts/zeroshot-tinybi.md`](../prompts/zeroshot-tinybi.md). It asks the agent to build **TinyBI**, a small local FastAPI dashboard for CSV files. The generated reference project lives in [`tinybi-reference/`](../tinybi-reference/).
 
-The live demo is intentionally simple:
+To follow the example from start to finish:
 
-1. Show the prompt.
-2. Point out that it asks for a complete project, not just a code snippet.
-3. Run the generated app.
-4. Upload or load sample CSV data.
-5. Use the resulting UI as material for the next topics.
+1. Read the prompt and notice that it asks for a complete project, not just a code snippet.
+2. Run the generated app.
+3. Upload a CSV file or load the sample data.
+4. Keep the resulting UI open; we will use it throughout the rest of the chapter.
 
 Run the reference app:
 
@@ -53,9 +52,13 @@ The prompt works because it describes more than the desired output. It also desc
 
 This is a useful pattern for prototypes, internal tools, learning projects, and throwaway demos. If the task is bounded and the prompt is concrete, zero-shot generation can get you surprisingly far.
 
-But this is also where the trap starts. After the magic moment, the generated code is now your code. If you do not understand the project structure, dependencies, endpoints, assumptions, and failure modes, you can end up with an app that works once but is hard to change or debug.
+The result still depends heavily on the model. A weaker model can fail on the same prompt that a stronger model handles easily, and even the same model endpoint does not guarantee the same quality forever. Providers can quietly change routing, system prompts, safety behavior, or the model itself without introducing a new public model name. A prompt that works impressively today may produce a noticeably worse or simply different project a few months later.
 
-For the workshop, TinyBI becomes our reference object. We can use it to ask the questions that matter after the first impressive generation:
+**After the magic moment, the generated code is your code.** You own its dependencies, architecture, assumptions, security problems, and failure modes even if you did not write a single line yourself. An app that works once can still be painful to change, deploy, or debug. The moment the agent gets stuck, you may have to understand the entire project under pressure, including all the small decisions you previously delegated without reading them.
+
+That is the real price of the speed: generation can skip the time spent writing code, but it cannot remove responsibility for the result. If nobody understands the project well enough to maintain it, then the impressive first run has merely postponed the work.
+
+TinyBI gives us something concrete for asking the questions that matter after the first impressive generation:
 
 - What made the prompt work?
 - What parts of the prompt were probably over-specified?
@@ -65,7 +68,7 @@ For the workshop, TinyBI becomes our reference object. We can use it to ask the 
 - How would we add a feature without losing control of the codebase?
 - How would we compare this output to another generated version?
 
-That is the reason for starting with the magic trick. It creates motivation first, then gives us something concrete to analyze for the rest of the chapter.
+A few minutes ago, TinyBI was an empty directory. Now it is an application you can click through. That jump is genuinely impressive. It is also the right moment to stop staring at the magic trick and look behind the curtain.
 
 ## `AGENTS.md` and `opencode.json`
 
@@ -87,11 +90,11 @@ OpenCode can create or update `AGENTS.md` with:
 /init
 ```
 
-According to the OpenCode docs, `/init` scans important files, asks targeted questions when the repo cannot answer something, and writes concise project-specific guidance. The actual prompt behind `/init` is stored in the OpenCode repo as [`initialize.txt`](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/command/template/initialize.txt).
+`/init` scans important files, asks targeted questions when the repo cannot answer something, and writes concise project-specific guidance. The prompt behind it is stored in the OpenCode repository as [`initialize.txt`](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/command/template/initialize.txt).
 
 The core idea from that template is: every line in `AGENTS.md` should answer the question "Would an agent likely miss this without help?" If not, leave it out.
 
-When executing the `/init` command the following command is being executed:
+For this repository, the request generated by `/init` looked like this:
 
 ```markdown
 Create or update `AGENTS.md` for this repository.
@@ -162,7 +165,7 @@ Prefer short sections and bullets. If the repo is simple, keep the file simple. 
 If `AGENTS.md` already exists at `/path/to/agentic-crashcourse`, improve it in place rather than rewriting blindly. Preserve verified useful guidance, delete fluff or stale claims, and reconcile it with the current codebase.
 ```
 
-Noticed the "User-provided focus or constraints (honor these):"-line? When adding additional instructions to the `/init` command then they will be added to the `AGENTS.md` creation request. 
+Notice the "User-provided focus or constraints (honor these):" line. Additional instructions passed to `/init` are inserted there and become part of the `AGENTS.md` creation request.
 
 A good `AGENTS.md` should mostly contain hard-earned context an agent would otherwise miss. A bad `AGENTS.md` becomes a generic style guide that burns context without changing behavior.
 
@@ -182,7 +185,7 @@ One detail that is easy to guess wrong: local rule files are not automatically m
 ```
 
 ### opencode.json
-`opencode.json` is the other half of the setup. Current OpenCode docs place project config at the repo root as `opencode.json` or `opencode.jsonc`. This is where I would configure things like:
+`opencode.json` is the other half of the setup. OpenCode loads project configuration from `opencode.json` or `opencode.jsonc` at the repository root, and it also loads configuration from the `.opencode` directory. This repository uses `.opencode/opencode.json`. This is where I would configure things like:
 
 - `mcp` servers such as Context7
 - `permission` rules for read, edit, bash, task, webfetch, and websearch
@@ -231,8 +234,7 @@ And permissions can make common operations low-friction while still guarding ris
 The practical split is:
 
 - `AGENTS.md`: what the agent should know about this repo
-- `opencode.json`: what OpenCode is allowed and configured to do
-- `.opencode/agents/`: reusable specialized agents, if the workflow needs them
+- `.opencode/opencode.json`: what OpenCode is allowed and configured to do
 
 Source docs: [OpenCode rules docs](https://opencode.ai/docs/rules/), [rules docs source](https://github.com/anomalyco/opencode/blob/dev/packages/web/src/content/docs/rules.mdx), and [`/init` prompt source](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/command/template/initialize.txt).
 
@@ -308,8 +310,6 @@ After a visual refactor, still check the actual app:
 - Did it add unnecessary complexity just to make the screenshot prettier?
 
 For frontend work, screenshots are best used as feedback loops: generate, inspect, screenshot, critique, edit, and verify again.
-
-
 ## Prompt engineering (More in the appendix)
 
 This is not meant to be a full prompt engineering guide. For this workshop, prompt engineering mostly means: shape the task enough that the model can make useful decisions without constantly stopping, guessing wildly, or overengineering the result.
@@ -406,7 +406,7 @@ Ask only these setup questions. After that, make reasonable assumptions and fini
   sample_data.csv
   ```
 
-  This makes the result easier to inspect and keeps the generated project close to what we expect.
+  This makes the result easier to inspect and keeps the generated project close to what we expect. It is also a double-edged sword and works best for small projects. By naming only `main.py`, this prompt encourages the model to cram all Python code into one file. For a larger project, prescribing the complete structure too early can force the wrong architecture before either you or the model understands the real boundaries of the application.
 
 - Describe the user flow:
 
@@ -416,7 +416,7 @@ Ask only these setup questions. After that, make reasonable assumptions and fini
   3. User uploads a CSV file and it is automatically analyzed.
   ```
 
-  User flow is often more useful than describing individual functions. It tells the model what behavior the files must create together.
+  User flow is often more useful than describing individual functions. It tells the model what behavior the files must create together. This is another double-edged sword: a phrase such as "beautiful landing/dashboard page" leaves most visual decisions to a model that cannot reliably judge the result like a human using the page. User flows describe behavior well, but they are not a replacement for concrete visual direction and feedback.
 
 - List visible outputs:
 
@@ -442,23 +442,6 @@ Ask only these setup questions. After that, make reasonable assumptions and fini
 
   This pushes the agent beyond the happy path, but only for cases that matter for the demo.
 
-- Give fallback behavior:
-
-  ```text
-  If the download fails, create a small realistic fallback sample_data.csv and clearly mention the fallback in the final summary.
-  ```
-
-  This is better than letting an external download failure break the whole task.
-
-- Ask for developer ergonomics:
-
-  ```text
-  Include a Makefile with common commands.
-  make serve -> runs uv run uvicorn main:app --reload
-  ```
-
-  For a workshop, this matters. The app should not only exist; it should be easy to run.
-
 - Ask for verification before stopping:
 
   ```text
@@ -480,7 +463,7 @@ Ask only these setup questions. After that, make reasonable assumptions and fini
 
 ### Tricks used after generation
 
-The screenshot feedback used a different kind of prompting. It was rough, but grounded:
+The screenshot let me write the request much more casually than I could have without the image:
 
 ```text
 [Image 1]
@@ -518,17 +501,17 @@ The pattern so far is simple:
 - use screenshots when visual context is easier than words
 - point to existing files instead of pasting context again
 
-More general prompt engineering belongs in the appendix. For the main workshop, these are the tricks we have actually used.
+These are the prompting tricks used to create and refine TinyBI. More general prompt engineering belongs in the appendix.
 
-## How to Generate
-There is not one correct way to use generative AI for coding. In practice, it is more useful to think of it as a spectrum: sometimes the model is doing most of the work, sometimes it is only preparing context, and sometimes it is reviewing something that already exists.
+## Who is driving?
+There is not one correct way to use generative AI for coding. Think of development as driving a car: you can keep your hands on the wheel, move into the passenger seat, or climb into the spectator seat and tell the agent where you want to end up. The right seat depends on how well you know the road, how expensive a crash would be, and how much you care about understanding the route.
 
-### YOLO-mode
-`YOLO-mode` is the extreme end of vibe coding. The term was popularized by Cursor for workflows where an LLM writes code fully autonomously. The developer stops reading most of the code and mainly keeps requesting features, refactors, fixes, and visual changes. The TinyBI zero-shot project was an explicit example of this: one big request, then let the agent build the whole thing from start to finish.
+### YOLO-mode | Developing from the spectator seat
+`YOLO-mode` is the extreme end of vibe coding. Many coding CLIs use the term for a no-rules mode in which the agent can act without repeatedly asking for permission. Applied to development more broadly, the agent takes the wheel while the developer watches from the spectator seat, calls out the destination, and keeps requesting features, refactors, fixes, and visual changes. The TinyBI zero-shot project was an explicit example of this: one big request, then let the agent build the whole thing from start to finish.
 
 The appeal is obvious. You can move as fast as you can come up with ideas. For throwaway prototypes, this can feel incredible.
 
-The problems become obvious as soon as the AI cannot figure something out. At that point, the developer has to manually understand a codebase they did not really write and may not have read. That can be painful.
+The problems become obvious as soon as the AI cannot figure something out. The car has stopped somewhere along a route you were not following, and now you are expected to repair it. At that point, the developer has to manually understand a codebase they did not really write and may not have read. That can be painful.
 
 Generated code also tends to accumulate inconsistency over time. Models are trained on many different styles, quality levels, design philosophies, and best practices from publicly available code, including a lot of public GitHub. The result can easily become a mix of patterns that do not really belong together. Another common failure mode is dead code: the agent tries one approach, patches around it, hits another problem, adds another workaround, later solves the original problem differently, but does not fully remove the old path.
 
@@ -543,17 +526,17 @@ There are cases where just-do-it prompts may be appropriate:
 - the output is a placeholder, draft, internal comment, or throwaway artifact
 - the task is genuinely simple
 
-### AI as a search engine
-The opposite extreme is using AI mostly as a search, reading, and context-preparation engine. I do not know of one universally accepted catchy name for this, but the workflow is simple: work roughly as you would without AI, except that the model reads documentation, source files, examples, Stack Overflow threads, blog posts, or issue discussions for you.
+### AI as a search engine | Developing from the driver's seat
+The opposite extreme is keeping your hands on the wheel and using AI for navigation. I do not know of one universally accepted catchy name for this, but the workflow is simple: work roughly as you would without AI, except that the model reads documentation, source files, examples, Stack Overflow threads, blog posts, or issue discussions for you.
 
-Instead of immediately asking it to change code, ask it to collect the relevant context, dump the important information into summaries and plans, explain the tradeoffs, and keep that context available for the next step. The developer still owns the decisions and should still understand the whole change.
+Instead of immediately asking it to change code, ask it to collect the relevant context, dump the important information into summaries and plans, explain the tradeoffs, and keep that context available for the next step. The AI can read the map and point out alternative routes, but the developer still owns the decisions and should still understand the whole change.
 
 This approach is slower than YOLO-mode, but the generated code is usually better and more consistent because the model has read more relevant material before writing. Some people call this kind of deliberate context preparation `context engineering`. We will come back to that idea later when talking about skills.
 
 In my opinion, this is also the best mode when learning a new topic. If the model simply writes the solution, you may get the answer but miss the understanding. If the model helps you read, compare, summarize, and then implement, you can move faster while still learning.
 
-### LLM for review
-`LLM for review` or `LLM as a judge` can mean different things in different contexts. Here, I mean using AI to inspect already existing code or compare already generated outputs.
+### LLM for review | Developing from the passenger seat
+`LLM for review` or `LLM as a judge` can mean different things in different contexts. Here, I mean putting the AI in the passenger seat and asking it to inspect existing code or compare already generated outputs. It is no longer driving, but it can still notice a missed turn, question a decision, or warn about something the driver overlooked.
 
 This mode works well together with the other two. It does not matter whether the code was written by a human, generated in YOLO-mode, or produced after careful context preparation. Once code exists, an LLM can often find weak points, inconsistencies, missing edge cases, unnecessary complexity, or places where the implementation does not match the stated goal.
 
