@@ -50,8 +50,10 @@ Connect to Zen:
 
 1. Start the TUI with `opencode` and enter `/connect`.
 2. Select **OpenCode Zen**. OpenCode directs you to [`opencode.ai/auth`](https://opencode.ai/auth).
-3. Sign in, create an API key, and copy it. Add credit or billing details only if you intend to use paid Zen models.
+3. Sign in, add the billing details requested by the current Zen setup, create an API key, and copy it. If you only intend to use free models, do not add credit unnecessarily; inspect the billing settings, disable automatic reload, and set a monthly limit before continuing.
 4. Paste the key into OpenCode, run `/models`, and select a model. Models marked as free do not consume paid Zen credit, but their availability and data policies can change.
+
+**Do not send confidential, personal, or proprietary data to Zen's free models.** Zen's [current privacy documentation](https://opencode.ai/docs/zen/#privacy) lists free-model exceptions whose prompts may be retained or used to improve the model. Paid Zen models have provider-specific retention rules, while Go currently documents zero-retention providers and model hosting in the US, EU, and Singapore. Recheck both policies before choosing a model because the catalog, hosting provider, and exceptions can change.
 
 Go starts from the same account but requires an active subscription:
 
@@ -84,6 +86,8 @@ To connect a key in OpenCode:
 
 OpenCode stores keys entered through `/connect` alongside other provider credentials in the local [`auth.json`](https://opencode.ai/docs/providers/#credentials) file (Unix: `$HOME/.local/share/opencode/auth.json`). For a custom provider, reference an environment variable from `opencode.json` rather than writing the secret directly into a tracked configuration file. The [provider guide](https://opencode.ai/docs/providers/#custom-provider) shows the `{env:VARIABLE_NAME}` syntax.
 
+List locally stored provider credentials with `opencode auth list` and remove one interactively with `opencode auth logout`. Local logout does not necessarily invalidate a copied key or already issued OAuth token. If a credential may have leaked, also revoke the key or authorized application in the provider's account console, then create a replacement if needed.
+
 ### Backend API policies
 
 Compatibility matrix (July 2026):
@@ -98,7 +102,7 @@ Separate usage-billed API | ✅ API key | ✅ API key | ✅ Gemini API key or Ve
 Paid API client support | Compatible OpenAI API clients | Compatible Anthropic API clients | Compatible Gemini API or Vertex AI clients | Compatible OpenAI or Anthropic API clients | Included above | Compatible OpenAI API clients | [Compatible OpenAI API clients](https://huggingface.co/docs/inference-providers/index#quick-setup-for-agents)
 Example models | Codex 5.4, 5.5, 5.6 | Haiku, Sonnet, Opus, Fable | Gemini 3.5 Flash, 3.1 Pro, 3 Flash | GPT 5.x, Claude, Gemini 3.x, Grok, Qwen 3.x, DeepSeek V4, GLM 5.x, MiniMax M2/M3, Kimi K2.x; Big Pickle*, DeepSeek V4 Flash*, MiMo-V2.5*, North Mini Code*, Nemotron 3 Ultra* | GLM 5.1/5.2, Kimi K2.6/K2.7 Code, MiMo-V2.5/Pro, MiniMax M2.7/M3, Qwen3.6/3.7, DeepSeek V4 Pro/Flash; Zen's free models* remain available after reaching the Go limits | [Popular coding models](https://openrouter.ai/rankings?programming-language=Python#programming-languages); [models by use case](https://openrouter.ai/apps); [free models](https://openrouter.ai/collections/free-models) | [200+ models from multiple inference providers](https://huggingface.co/models?inference_provider=all)
 Pricing | [Plus $20/month, Pro from $100/month; API billed separately](https://developers.openai.com/codex/pricing) | [Pro $20/month, Max from $100/month; API billed separately](https://claude.com/pricing) | Consumer Antigravity access: [Free, AI Pro €21.99/month, AI Ultra from €99.99/month](https://gemini.google/subscriptions/); API billed separately | [Pay per token](https://opencode.ai/docs/zen/#pricing) | [$5 for the first month, then $10/month](https://opencode.ai/docs/go/) | [Pay per token](https://openrouter.ai/pricing) | [Pay per use at the upstream provider's rate](https://huggingface.co/docs/inference-providers/pricing)
-Usage limits | [Model-dependent five-hour and weekly limits; Pro offers 5x or 20x the Plus limits](https://developers.openai.com/codex/pricing) | [Rolling five-hour and weekly limits; Max offers 5x or 20x the Pro limits](https://support.anthropic.com/en/articles/9797557-usage-limit-best-practices) | Consumer Antigravity limits are plan-dependent; consult the [current documentation](https://antigravity.google/docs/) | Pay per token; [monthly spending limits can be configured](https://opencode.ai/docs/zen/#monthly-limits) | [$12 per 5 hours, $30 per week, $60 per month](https://opencode.ai/docs/go/#usage-limits) | Paid models have high global limits; [free models: 20 requests/minute and 50/day, or 1,000/day after purchasing at least $10 in credits](https://openrouter.ai/docs/api/reference/limits) | [Free users receive $0.10 in monthly credits; further use requires purchased credits and provider/model limits vary](https://huggingface.co/docs/inference-providers/pricing)
+Usage limits | [Model-dependent five-hour and weekly limits; Pro offers 5x or 20x the Plus limits](https://developers.openai.com/codex/pricing) | [Rolling five-hour and weekly limits; Max offers 5x or 20x the Pro limits](https://support.anthropic.com/en/articles/9797557-usage-limit-best-practices) | Consumer Antigravity limits are plan-dependent; consult Google's [transition announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli) and the current product UI | Pay per token; [monthly spending limits can be configured](https://opencode.ai/docs/zen/#monthly-limits) | [Included usage allowance: $12-equivalent per 5 hours, $30 per week, and $60 per month; request counts depend on the model](https://opencode.ai/docs/go/#usage-limits) | Paid models have high global limits; [free models: 20 requests/minute and 50/day, or 1,000/day after purchasing at least $10 in credits](https://openrouter.ai/docs/api/reference/limits) | [Free users receive $0.10 in monthly credits; further use requires purchased credits and provider/model limits vary](https://huggingface.co/docs/inference-providers/pricing)
 
 \* Free through Zen at the time of writing. These models may only be free temporarily and can have different data-retention rules. They remain available when the OpenCode Go usage limits are reached, but they are not part of the Go subscription endpoint itself.
 
@@ -146,13 +150,16 @@ opencode serve --port 4096
 opencode attach http://127.0.0.1:4096
 ```
 
-Both commands bind to `127.0.0.1` by default. That is appropriate for this workshop because only applications on your machine can connect. To deliberately make the Web interface available on your network, bind it to all interfaces and set HTTP basic authentication:
+Both commands bind to `127.0.0.1` by default. That is the workshop setup and the safest default because only applications on your machine can connect. Treat access from another machine as an advanced deployment rather than a convenience toggle. If you deliberately make the Web interface available on your network, bind it to all interfaces and set HTTP basic authentication without placing the password in your shell history:
 
 ```bash
-OPENCODE_SERVER_PASSWORD='choose-a-long-password' opencode web --hostname 0.0.0.0 --port 4096
+read -rsp 'OpenCode password: ' OPENCODE_SERVER_PASSWORD
+export OPENCODE_SERVER_PASSWORD
+opencode web --hostname 0.0.0.0 --port 4096
+unset OPENCODE_SERVER_PASSWORD
 ```
 
-The username defaults to `opencode`; set `OPENCODE_SERVER_USERNAME` if you need to change it. **Do not expose OpenCode to a network or the internet without at least a password.** For internet access, also place it behind HTTPS and appropriate firewall or VPN rules because basic authentication alone does not encrypt traffic.
+The username defaults to `opencode`; set `OPENCODE_SERVER_USERNAME` if you need to change it. The final `unset` runs after the server stops. **A password is mandatory for non-loopback access, but it is not sufficient on an untrusted network.** HTTP basic authentication does not encrypt credentials, prompts, code, or responses. Use HTTPS or a trusted VPN plus appropriate firewall rules whenever traffic leaves a machine you control, including on an untrusted local network.
 
 As of July 2026, OpenCode can serve several clients, but it is not a multi-user application. It has no separate user accounts, roles, private workspaces, or per-user permissions; connected clients share the server's projects, sessions, credentials, and operating-system privileges. That makes it a poor fit for a shared home-lab service. Run separate, isolated instances for separate people rather than treating one exposed server like a self-hosted ChatGPT. The [Web](https://opencode.ai/docs/web/) and [server](https://opencode.ai/docs/server/) documentation describe the current network and authentication options.
 
@@ -175,7 +182,7 @@ Selection is context, not a restriction. The agent can still inspect other files
 The following tools go beyond what we need for this workshop. They are included as starting points if you prefer a provider-specific agent, want a persistent personal assistant, need to serve a local model, or want a graphical document-chat application.
 
 ### Claude Code, Codex CLI, and Antigravity CLI
-[Claude Code](https://code.claude.com/docs/en/overview), [Codex CLI](https://developers.openai.com/codex/cli/), and [Antigravity CLI](https://antigravity.google/docs/) are provider-native coding agents. Like OpenCode, they inspect a repository, edit files, and run terminal commands. Unlike OpenCode, each is primarily developed around its provider's own models, authentication, and product ecosystem.
+[Claude Code](https://code.claude.com/docs/en/overview), [Codex CLI](https://developers.openai.com/codex/cli/), and [Antigravity CLI](https://antigravity.google/download) are provider-native coding agents. Like OpenCode, they inspect a repository, edit files, and run terminal commands. Unlike OpenCode, each is primarily developed around its provider's own models, authentication, and product ecosystem.
 
 **Best for:** developers who already have an eligible Claude or ChatGPT subscription, or eligible Google access, and prefer the provider's first-party experience over OpenCode's model flexibility. They are also the least surprising choice when an organization already manages that provider's enterprise accounts and policies.
 
@@ -232,21 +239,18 @@ For Ollama, use the signed installer from its [download page](https://ollama.com
 ollama run qwen3
 ```
 
-For vLLM, create a fresh Python environment, follow the [hardware-specific installation guide](https://docs.vllm.ai/en/stable/getting_started/installation/), and serve a model. The API is then available at `http://localhost:8000/v1`.
+For vLLM, follow the [hardware-specific installation guide](https://docs.vllm.ai/en/stable/getting_started/installation/), install it with `uv`, and serve a model. The API is then available at `http://localhost:8000/v1`.
 
 ```bash
-uv venv --python 3.12 --seed
-source .venv/bin/activate
 uv pip install vllm --torch-backend=auto
-vllm serve Qwen/Qwen2.5-1.5B-Instruct
+uv run vllm serve Qwen/Qwen2.5-1.5B-Instruct
 ```
 
 For SGLang's standard NVIDIA path, follow its [installation guide](https://docs.sglang.io/get_started/install.html), then launch a model server. The API is available at `http://localhost:30000/v1`.
 
 ```bash
-pip install uv
 uv pip install --prerelease=allow sglang
-python3 -m sglang.launch_server --model-path Qwen/Qwen2.5-0.5B-Instruct
+uv run python -m sglang.launch_server --model-path Qwen/Qwen2.5-0.5B-Instruct
 ```
 
 Model size, precision, context length, and concurrency determine the required VRAM. CUDA, ROCm, CPU, Apple Silicon, and other backends have different support and installation paths, so do not blindly paste the NVIDIA quickstart onto another platform. An OpenAI-compatible endpoint also does not mean every OpenAI parameter behaves identically; check the [vLLM server reference](https://docs.vllm.ai/en/stable/serving/online_serving/openai_compatible_server/) or [SGLang API reference](https://docs.sglang.io/basic_usage/openai_api_completions.html) before integrating an application.
