@@ -40,6 +40,27 @@ Connect an account (using OpenAI as the example):
 
 These steps follow OpenCode's [current OpenAI provider guide](https://opencode.ai/docs/providers/#openai). Provider names, supported plans, and login screens change, so use that guide as the source of truth if the interface no longer matches these screenshots or instructions.
 
+### OpenCode Zen and Go
+OpenCode Zen and OpenCode Go are the simplest provider options when you do not already have an eligible subscription elsewhere. Both are operated by the OpenCode team and use an API key rather than browser OAuth inside the CLI, but they have different billing models:
+
+- **Zen** is usage-billed. Its curated catalog includes paid models and a rotating selection of [free models](https://opencode.ai/docs/zen/#pricing). This is the option I recommend for starting the workshop without another subscription.
+- **Go** is a fixed-price subscription with [five-hour, weekly, and monthly usage limits](https://opencode.ai/docs/go/#usage-limits). It offers a smaller curated catalog; Zen's free models remain available as a fallback after reaching a Go limit.
+
+Connect to Zen:
+
+1. Start the TUI with `opencode` and enter `/connect`.
+2. Select **OpenCode Zen**. OpenCode directs you to [`opencode.ai/auth`](https://opencode.ai/auth).
+3. Sign in, create an API key, and copy it. Add credit or billing details only if you intend to use paid Zen models.
+4. Paste the key into OpenCode, run `/models`, and select a model. Models marked as free do not consume paid Zen credit, but their availability and data policies can change.
+
+Go starts from the same account but requires an active subscription:
+
+1. Sign in to [OpenCode Zen](https://opencode.ai/auth), subscribe to [OpenCode Go](https://opencode.ai/docs/go/), and copy the API key shown for the account.
+2. In OpenCode, enter `/connect` and select **OpenCode Go** rather than Zen.
+3. Paste the key, run `/models`, and select one of the Go models.
+
+The key is a secret even when it only reaches free models. OpenCode stores it locally in `~/.local/share/opencode/auth.json`; do not commit or share that file. Zen and Go also process prompts and the code OpenCode sends as context on external infrastructure. An OpenCode account or locally running CLI does not make inference local.
+
 ### Bring your own key
 Bring your own key (BYOK) means obtaining an API key from a provider and giving that key to OpenCode. Paid models also require billing or credits on the API account; the key does not turn a consumer subscription into API credit. For example, ChatGPT subscription billing and usage-based OpenAI API billing are separate.
 
@@ -91,6 +112,63 @@ The table, especially its pricing, changes frequently, and I probably will not k
 - [Further reading on Claude Code](https://news.ycombinator.com/item?id=47444748)
 - [Further reading on Gemini CLI and Antigravity CLI](https://github.com/google-gemini/gemini-cli/discussions/22970)
 
+
+## OpenCode Web
+The terminal is scary only until it becomes familiar, but familiarity is not a prerequisite for this workshop. OpenCode includes a locally served Web interface with the same agent, models, project files, tools, and sessions as the TUI. You can complete the workshop through either interface.
+
+Open a terminal in the project and run:
+
+```bash
+opencode web
+```
+
+OpenCode starts its local server, opens the interface in your browser, and prints the address in the terminal. Keep that process running while you work; press `Ctrl+C` to stop it. Because you started OpenCode from the project directory, that directory becomes the workspace the agent can inspect and modify. Check the directory before sending the first prompt.
+
+Remember that “local Web interface” describes the UI and server, not necessarily the model. Prompts and selected project context still leave the machine when you use Zen, Go, OpenAI, or another remote provider.
+
+The following screenshots show the same TinyBI review workflow in both clients. The browser renders the conversation, tool results, and changed-file summary like a familiar chat application:
+
+![OpenCode Web](images/01%20opencode-web.png)
+
+The TUI keeps more of the machinery visible: the generated patch, model and reasoning setting, context usage, connected MCP servers, and project status. The presentation differs, but the agent is doing the same work against the same repository:
+
+![OpenCode TUI](images/01%20opencode-tui.png)
+
+### OpenCode Web remote access
+
+`opencode web` starts the server and browser interface together. `opencode serve` starts only the headless HTTP server and its OpenAPI endpoint; it is useful for programmatic clients or a separately attached TUI. For example, this keeps the backend in one terminal and connects a TUI from another:
+
+```bash
+# First terminal
+opencode serve --port 4096
+
+# Second terminal
+opencode attach http://127.0.0.1:4096
+```
+
+Both commands bind to `127.0.0.1` by default. That is appropriate for this workshop because only applications on your machine can connect. To deliberately make the Web interface available on your network, bind it to all interfaces and set HTTP basic authentication:
+
+```bash
+OPENCODE_SERVER_PASSWORD='choose-a-long-password' opencode web --hostname 0.0.0.0 --port 4096
+```
+
+The username defaults to `opencode`; set `OPENCODE_SERVER_USERNAME` if you need to change it. **Do not expose OpenCode to a network or the internet without at least a password.** For internet access, also place it behind HTTPS and appropriate firewall or VPN rules because basic authentication alone does not encrypt traffic.
+
+As of July 2026, OpenCode can serve several clients, but it is not a multi-user application. It has no separate user accounts, roles, private workspaces, or per-user permissions; connected clients share the server's projects, sessions, credentials, and operating-system privileges. That makes it a poor fit for a shared home-lab service. Run separate, isolated instances for separate people rather than treating one exposed server like a self-hosted ChatGPT. The [Web](https://opencode.ai/docs/web/) and [server](https://opencode.ai/docs/server/) documentation describe the current network and authentication options.
+
+### VS Code integration
+
+The useful integration is passing editor context to the agent without copying an isolated code fragment. Open the project in VS Code, open its integrated terminal, and run `opencode` once; this installs the OpenCode extension automatically. Select the relevant lines, then press `Alt+Ctrl+K` on Linux or Windows, or `Cmd+Option+K` on macOS. The extension inserts a reference such as `@main.py#L37-42` into the OpenCode prompt. Add the actual question after it:
+
+```text
+@main.py#L37-42 Why can this value be None, and where should we validate it?
+```
+
+This automatic handoff currently targets the OpenCode terminal managed by the VS Code extension. Use `Ctrl+Esc` on Linux or Windows, or `Cmd+Esc` on macOS, to open or focus that terminal; add `Shift` to start a new session. The extension cannot inject the selection into an arbitrary OpenCode process running in an external terminal window.
+
+The Web interface also has no documented VS Code selection handoff. For an external TUI, enter the same `@file#Lx-y` reference manually. In OpenCode Web, mention the path and line range directly, for example `Inspect main.py lines 37-42`. This is less magical but more predictable, and it works regardless of which OpenCode client you use.
+
+Selection is context, not a restriction. The agent can still inspect other files and use tools when the task requires it, subject to your configured permissions. Include the relevant error message and intended behavior instead of expecting a highlighted line to explain the whole problem. The [IDE integration documentation](https://opencode.ai/docs/ide/) lists the current shortcuts and supported VS Code forks.
 
 
 ## Beyond the scope of this workshop
@@ -181,13 +259,3 @@ Model size, precision, context length, and concurrency determine the required VR
 The easiest route is [AnythingLLM Desktop](https://docs.anythingllm.com/installation-desktop/overview): [download the official installer](https://anythingllm.com/download), start the application, and select either the built-in local model provider or a cloud provider during onboarding. Then create a workspace and upload documents. Desktop is single-user; local models require substantially more RAM or VRAM than cloud models. If you select a cloud model, the prompts and retrieved document passages sent to it leave your machine and are subject to that provider's policies.
 
 For shared use, deploy the [Docker edition](https://docs.anythingllm.com/installation-docker/quickstart), persist `/app/server/storage`, open `http://localhost:3001`, and configure a provider under **Settings**. Enable authentication and HTTPS before exposing it beyond your machine. A provider running on the Docker host is not the container's `localhost`; follow the [Docker networking guide](https://docs.anythingllm.com/installation-docker/localhost) for the correct host address.
-
-
-## OpenCode Web
-## OpenCode Zen and Go
-
-
-
-![OpenCode Web](images/01%20opencode-web.png)
-
-![OpenCode TUI](images/01%20opencode-tui.png)
