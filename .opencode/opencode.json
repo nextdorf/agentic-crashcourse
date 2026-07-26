@@ -14,6 +14,11 @@
         "x-api-key": "{env:RAPIDAPI_KEY}"
       },
       "enabled": false
+    },
+    "tinybi": {
+      "type": "remote",
+      "url": "http://127.0.0.1:8000/mcp",
+      "enabled": true
     }
   },
   "permission": {

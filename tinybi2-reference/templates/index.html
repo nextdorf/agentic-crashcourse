@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ app_name }} | Shared CSV Analytics</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Shared CSV workspace</p>
+          <h1>{{ app_name }}</h1>
+          <p class="lede">Explore a local CSV in the browser or through MCP. Both interfaces publish to the same live dashboard.</p>
+          <div class="hero-actions">
+            <button id="sampleBtn" class="button primary" type="button">Load sample data</button>
+            <a class="button ghost" href="/sample-data?download=true">Download sample CSV</a>
+          </div>
+        </div>
+        <div class="hero-card">
+          <div class="mini-dashboard" aria-hidden="true">
+            <div class="mini-header"><span></span><span></span><span></span></div>
+            <div class="mini-stat-row"><div><small>Workspace</small><strong>1 shared</strong></div><div><small>Preview</small><strong>10 rows</strong></div></div>
+            <div class="mini-chart"><span style="height:38%"></span><span style="height:68%"></span><span style="height:46%"></span><span style="height:82%"></span><span style="height:58%"></span><span style="height:92%"></span></div>
+          </div>
+          <div class="hero-card-copy"><strong>Browser + MCP, synchronized.</strong><p>Revision polling makes workshop changes visible across every open client.</p></div>
+        </div>
+      </section>
+
+      <section class="panel uploader-panel">
+        <label id="dropZone" for="fileInput" class="drop-zone">
+          <input id="fileInput" type="file" accept=".csv,text/csv" aria-describedby="fileHelp">
+          <span class="drop-copy"><span class="upload-icon">CSV</span><strong class="drop-title">Drop or choose a CSV</strong><span id="fileHelp">Maximum {{ '%g' | format(max_input_mb) }} MB. Data stays in this local process.</span></span>
+        </label>
+        <div>
+          <form id="controls" class="controls">
+            <label class="wide">Filter query<input name="filter_query" placeholder="`Order Date` >= '2016-01-01'" aria-describedby="filterHelp"></label>
+            <label>X column<select name="x_column" disabled><option value="">Analyze data first</option></select></label>
+            <label>Y measure<select name="y_column" disabled><option value="">Analyze data first</option></select></label>
+            <label>Aggregation<select name="aggregation"><option>sum</option><option>mean</option><option>median</option><option>min</option><option>max</option><option>count</option></select></label>
+            <label>Chart type<select name="chart_type"><option value="auto">auto</option><option value="bar">bar</option><option value="line">line</option></select></label>
+            <label>Sort<select name="sort_by"><option value="">smart default</option><option value="label_asc">label ascending</option><option value="label_desc">label descending</option><option value="value_asc">value ascending</option><option value="value_desc">value descending</option></select></label>
+            <label>Group limit<input name="limit" type="number" value="20" min="1" max="50"></label>
+          </form>
+          <p id="filterHelp" class="filter-help">Filters use case-sensitive pandas query syntax. Use exact names and backticks around names with spaces.</p>
+          <div id="columnRoles" class="role-strip" aria-live="polite">Detected column roles appear after analysis.</div>
+        </div>
+      </section>
+
+      <div class="run-bar">
+        <section class="config-bar" aria-label="Visible dashboard sections">
+          <label><input type="checkbox" data-config="show_metrics" checked> Metrics</label>
+          <label><input type="checkbox" data-config="show_charts" checked> Charts</label>
+          <label><input type="checkbox" data-config="show_insights" checked> Insights</label>
+          <label><input type="checkbox" data-config="show_preview" checked> Preview</label>
+        </section>
+        <div id="status" class="status muted" role="status" aria-live="polite">Load the sample data or upload a CSV to begin.</div>
+        <div id="revision" class="revision">Revision 0 · waiting</div>
+      </div>
+
+      <div class="dashboard-layout">
+        <section id="metricsSection" class="section hidden"><div class="section-heading"><p class="eyebrow">Overview</p><h2>Metrics</h2></div><div id="metrics" class="metrics-grid"></div></section>
+        <section id="chartsSection" class="section hidden"><div class="section-heading"><p class="eyebrow">Visuals</p><h2>Charts</h2></div><div id="charts" class="charts-grid"></div></section>
+        <section id="insightsSection" class="section hidden"><div class="section-heading"><p class="eyebrow">Observed</p><h2>Insights</h2></div><div id="insights" class="insights-grid"></div></section>
+        <section id="previewSection" class="section hidden"><div class="section-heading"><p class="eyebrow">Normalized</p><h2>CSV preview</h2></div><div class="table-wrap"><table id="previewTable"></table></div></section>
+      </div>
+    </main>
+    <script>window.initialConfig = {{ config | tojson }};</script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

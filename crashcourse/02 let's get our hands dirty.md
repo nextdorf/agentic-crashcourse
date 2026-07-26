@@ -321,6 +321,8 @@ The TinyBI demo already used several practical prompting tricks.
 The large zero-shot prompt in [`prompts/zeroshot-tinybi.md`](../prompts/zeroshot-tinybi.md) did not appear fully formed. It started from a much smaller meta-prompt:
 
 ```text
+[I discussed in the chat history the idea of what kind of proof of concept I wanted to build. Unfornately I did not save that discussion.]
+
 give me a prompt for my agent (opencode with gpt 5.5) which attempts to build it all with a single request from start to finish - no user questions
 ```
 
