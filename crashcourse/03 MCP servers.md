@@ -333,3 +333,34 @@ Opening the thoughts reveals the reasoning:
 In the first block, we can see Kimi's "inner monologue", which basically prompts itself to provide better output. How a model makes this decision and whether it would or could use reasoning at all are quite model-dependent. The inference provider controls whether OpenCode receives the actual reasoning, a summary, some filler text, or nothing. Interestingly, it decided to put that result into context and highlight that the returned information is probably not factual.
 
 A more detailed overview of tools for a generic MCP server can be found in the [MCP specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool). In general, an MCP server may also expose [resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources) and [prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts), but the AeroDataBox MCP does not.
+
+
+## TinyBI 2
+```opencode
+use the tinybi mcp and figure the most profitable category-city pairs and the least profitable ones and make a final verdict and where to invest and what to drop in order to maximize profits
+
+[...]
+
+go deeper and do some explorative analysis of the dataset
+```
+
+The AI started by asking TinyBI to inspect the active dataset. This provided the available dimensions and measures, the date range, missing values, and the valid chart options without changing the dashboard.
+
+For the first question, the AI split the data by product category and ranked cities by total profit. It created separate charts for the most and least profitable cities in Furniture, Office Supplies, and Technology. This made the strongest and weakest category-city pairs directly comparable instead of mixing city size with product performance.
+
+The follow-up question required moving beyond that first ranking. The AI used TinyBI to explore the dataset from several directions:
+
+1. Compare sales, profit, and profit margin by category and sub-category.
+2. Check whether high sales also produced high profit.
+3. Break profit down by discount level to identify where otherwise healthy sales became losses.
+4. Compare categories and sub-categories across regions, states, cities, and customer segments.
+5. Check shipping modes to see whether fulfillment choices explained the losses.
+6. Compare yearly category profits to distinguish persistent growth from a one-off result.
+
+The reasoning was to avoid making the verdict from one profitable city or one bad product. The AI looked for patterns that repeated across several dimensions and separated high-revenue products from high-profit products. This revealed that the main problem was not insufficient sales, but aggressive discounting and a small number of weak product-region combinations. Technology and Office Supplies remained strong across years and markets, while Furniture generated substantial sales with comparatively little profit.
+
+This led to the closing words of the [full explorative analysis report](03%20explorative%20analysis%20report.md):
+
+> **Do not maximize profit by chasing more sales. Maximize it by protecting prices, expanding Technology and Office Supplies in proven markets, and removing region-product combinations that generate revenue without profit.**
+
+![Auto generated plots](images/03%20tinybi2%20mcp%20exploration.png)
