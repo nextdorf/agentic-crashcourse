@@ -1,8 +1,8 @@
 # TinyBI 2
 
-TinyBI 2 is a local FastAPI CSV dashboard shared by a browser and a purpose-built MCP server. It detects likely dates, measures, dimensions, and identifiers; applies typed pandas filters; and publishes bounded metrics, Chart.js data, deterministic insights, and a 10-row normalized preview.
+TinyBI 2 is a local FastAPI CSV dashboard shared by a browser and a purpose-built MCP server. It detects likely dates, measures, dimensions, and identifiers; applies typed pandas filters; and publishes bounded metrics, Chart.js data, deterministic insights, and a normalized preview.
 
-This refinement adds explicit validation, encoding and row-count metadata, a configurable input limit, chronological time charts, safer insights, column dropdowns, sorting controls, accessible request feedback, stale-request cancellation, and revision polling. Browser and MCP actions update the same in-memory dashboard.
+The browser and MCP operate on one versioned in-memory workspace. Automatic analysis produces disposable overview charts. MCP clients can also maintain an ordered collection of explicit bar, line, scatter, and heatmap charts.
 
 ## Install And Run
 
@@ -17,21 +17,21 @@ The direct equivalent is:
 uv run uvicorn main:app --reload
 ```
 
-Open `http://127.0.0.1:8000`. Run one Uvicorn worker only: the shared workspace is process-local. Server restart and `--reload` clear the active dataset and revision.
+Open `http://127.0.0.1:8000`. Use one Uvicorn worker: the workspace is process-local. Restart and `--reload` create a new workspace incarnation and clear all state.
 
-Run tests with:
+Run verification with:
 
 ```bash
 uv run pytest
+node --test static/app-core.test.js
+node --check static/app.js
 ```
 
-## Sample And Filters
+## Datasets And Filters
 
-The included `sample_data.csv` has 9,994 Superstore rows and these columns:
+The default input limit is 10 MB. Set `TINYBI_MAX_INPUT_BYTES` before startup to change it. Numeric infinities are treated as missing values, previews contain at most 10 rows, and chart results are bounded.
 
-`Row ID`, `Order ID`, `Order Date`, `Ship Date`, `Ship Mode`, `Customer ID`, `Customer Name`, `Segment`, `Country`, `City`, `State`, `Postal Code`, `Region`, `Product ID`, `Category`, `Sub-Category`, `Product Name`, `Sales`, `Quantity`, `Discount`, and `Profit`.
-
-Filters are case-sensitive `pandas.DataFrame.query` expressions. Numeric and date-like text is coerced before filtering. Use exact column names and backticks for spaces or punctuation:
+Filters are case-sensitive `pandas.DataFrame.query` expressions. Use exact column names and backticks around names containing spaces:
 
 ```text
 Sales > 100 and Region == 'West'
@@ -39,29 +39,51 @@ Sales > 100 and Region == 'West'
 `Sub-Category` == 'Chairs'
 ```
 
-The default input limit is 10 MB. Set `TINYBI_MAX_INPUT_BYTES` before startup to change it. MCP path input is restricted to `.csv` files whose resolved path, including symlinks, remains inside this project directory. Use inline input for data elsewhere.
+MCP path input is restricted to `.csv` files whose resolved path, including symlinks, remains inside this project directory. Use inline input for data elsewhere.
+
+## Workspace Versioning
+
+Every state-changing call requires:
+
+```json
+{
+  "expected_incarnation": "process-lifetime token",
+  "expected_revision": 4
+}
+```
+
+Read the current values with `GET /state`, `inspect_dataset`, or `list_charts`. A stale mutation returns HTTP 409 or an MCP tool error without changing state. Refresh the workspace and retry with the returned version.
+
+The revision increments once for each successful changed transaction. No-op visibility updates and no-op chart reordering do not increment it. Browser analysis requests also carry a client ID and increasing request sequence so an aborted or superseded request cannot commit later.
 
 ## HTTP API
 
-- `GET /` serves the dashboard.
-- `POST /analyze` accepts multipart CSV field `file` plus optional `filter_query`, `chart_type`, `x_column`, `y_column`, `aggregation`, `sort_by`, and `limit` fields.
-- `GET /sample-data` analyzes and activates the sample with the same optional controls.
-- `GET /sample-data?download=true` downloads the sample CSV.
-- `POST /config` validates and shares metrics, charts, insights, and preview visibility.
-- `GET /state` returns the current bounded snapshot and synchronization revision.
-- `GET /state?after_revision=N` returns HTTP 204 when revision `N` is current, otherwise the newer snapshot.
+- `GET /` serves the dashboard and initial workspace version.
+- `POST /analyze` accepts multipart field `file`, workspace/request version fields, and optional analysis controls. It explicitly replaces the dataset.
+- `POST /analyze-active` applies JSON controls to the committed dataset without reuploading or selecting the sample.
+- `POST /sample-data` explicitly activates and analyzes the included sample.
+- `GET /sample-data` downloads the sample CSV.
+- `POST /config` applies a versioned visibility update.
+- `GET /state` returns the current bounded snapshot.
+- `GET /state?incarnation=TOKEN&after_revision=N` returns HTTP 204 only when that exact workspace version remains current.
 
-Responses expose safe source labels, never uploaded bytes, complete datasets, inline CSV text, or absolute paths. Each successful state-changing action increments the revision exactly once. A failed parse, filter, or control validation leaves the prior state unchanged.
+Browser analysis mutations additionally require `request_client` and positive `request_sequence` fields. Successful explicit dataset replacement clears managed charts but does not reset their ID counter.
 
-## MCP
+Responses expose safe source labels, never uploaded bytes, complete datasets, inline CSV text, DataFrames, or absolute paths.
 
-The Streamable HTTP MCP endpoint is `http://127.0.0.1:8000/mcp` and exposes exactly three tools:
+## MCP Tools
 
-- `inspect_dataset`: discover exact columns, heuristic roles, missingness, ranges, valid choices, and filter examples without changing state. Example intent: "Inspect the open CSV and tell me valid measures."
-- `analyze_dataset`: publish a broad dashboard with selected metrics, charts, insights, or preview. Example intent: "Analyze the open data for West-region orders."
-- `create_chart`: publish one explicit bounded X/Y aggregation. Example intent: "Chart total Sales by Order Date chronologically."
+The Streamable HTTP MCP endpoint is `http://127.0.0.1:8000/mcp` and exposes seven tools:
 
-Omitting `dataset` means "use the active shared dataset", falling back to the sample only when the workspace is empty. The schema-enforced alternatives are:
+- `inspect_dataset`: inspect roles, missingness, ranges, valid choices, filter examples, and current version without changing state.
+- `analyze_dataset`: publish the broad automatic dashboard. Omit `dataset` to preserve managed charts; provide one to replace the dataset and clear them atomically.
+- `list_charts`: list managed chart IDs, order, titles, and definitions, optionally with bounded rendered data.
+- `create_charts`: atomically add one to ten managed chart definitions.
+- `update_charts`: atomically replace selected definitions while preserving IDs.
+- `delete_charts`: atomically remove selected IDs.
+- `reorder_charts`: atomically set the complete managed-chart order.
+
+Dataset alternatives are schema-enforced:
 
 ```json
 {"source": "sample"}
@@ -69,14 +91,56 @@ Omitting `dataset` means "use the active shared dataset", falling back to the sa
 {"source": "inline", "inline_csv": "Region,Revenue\nWest,100\nEast,80\n"}
 ```
 
-An explicit dataset on `analyze_dataset` or `create_chart` becomes active only after successful validation. An explicit dataset on `inspect_dataset` remains read-only.
+An explicit dataset on `analyze_dataset` or `create_charts` becomes active only when the complete operation validates. `inspect_dataset` never changes active state.
 
-To use MCP Inspector, start TinyBI and connect its Streamable HTTP transport to `http://127.0.0.1:8000/mcp`. Any MCP client supporting Streamable HTTP can use the same URL. The endpoint is an MCP transport, not a normal JSON `GET` API.
+## Managed Charts
+
+Managed chart IDs are monotonically increasing positive integers. Updating and reordering preserve IDs; deleted IDs are never reused during the process lifetime. Automatic charts render first, followed by managed charts in registry order.
+
+Grouped bar or line definition:
+
+```json
+{
+  "type": "bar",
+  "x_column": "Region",
+  "y_column": "Revenue",
+  "aggregation": "sum",
+  "sort_by": "value_desc",
+  "limit": 20
+}
+```
+
+Scatter definition; both axes must be detected measures:
+
+```json
+{
+  "type": "scatter",
+  "x_column": "Discount",
+  "y_column": "Profit",
+  "limit": 50
+}
+```
+
+Heatmap definition; both axes must be grouping columns and the value must be a measure:
+
+```json
+{
+  "type": "heatmap",
+  "x_column": "Region",
+  "y_column": "Category",
+  "value_column": "Sales",
+  "aggregation": "sum",
+  "x_limit": 10,
+  "y_limit": 10
+}
+```
+
+All chart definitions support an optional `title` and `filter_query`. Batch validation is atomic: one invalid ID, column, definition, filter, or order rejects the entire call without consuming IDs.
 
 ## Local Limitations
 
-- Every browser and MCP client shares one workspace; there are no workspace IDs or accounts.
-- State exists only in memory and resets on restart or reload.
+- Every browser and MCP client shares one workspace; there are no accounts or workspace IDs.
+- State and chart IDs reset on process restart.
 - Run exactly one Uvicorn worker; multiple workers would have separate state.
-- Charts load pinned Chart.js 4.5.0 from jsDelivr and require network access unless that asset is vendored locally.
+- Charts load pinned Chart.js 4.5.0 and `chartjs-chart-matrix` 2.0.1 from jsDelivr and require network access unless vendored locally.
 - Role detection is heuristic. Verify identifiers and business meaning against the source domain.

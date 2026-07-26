@@ -5,24 +5,30 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import BaseModel, ConfigDict, Field
 
-from analytics import AnalysisError, DashboardStore, MAX_INPUT_BYTES
+from analytics import (
+  AnalysisError,
+  CHART_BATCH_LIMIT,
+  CHART_LIMIT,
+  DashboardStore,
+  HEATMAP_AXIS_LIMIT,
+  MAX_INPUT_BYTES,
+  SECTIONS,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
 SAMPLE_PATH = BASE_DIR / 'sample_data.csv'
 DATASET_DESCRIPTION = (
-  'Optionally selects one CSV input. Omit this field to use the dataset active in TinyBI\'s shared browser/MCP '
-  'workspace, falling back to the included sample only when no dataset is active. Supply it to use the included '
-  'sample, a permitted project-local CSV path, or complete inline CSV text. For state-changing tools, a successfully '
-  'validated explicit dataset becomes active; inspect_dataset never changes active state.'
+  'Optionally selects one CSV input. Omit it to use the active shared dataset. A successfully validated explicit '
+  'dataset on analyze_dataset or create_charts replaces the active dataset and clears existing managed charts.'
+)
+VERSION_DESCRIPTION = (
+  'Workspace version obtained from inspect_dataset, list_charts, or another successful call. Both fields are '
+  'required for mutations; stale versions are rejected without changing state.'
 )
 FILTER_DESCRIPTION = (
-  'Optional, case-sensitive pandas DataFrame.query expression applied after likely numeric and date columns are '
-  'coerced, but before metrics, grouping, and aggregation. Use exact column names and wrap names containing spaces '
-  'or punctuation in backticks. String comparisons are case-sensitive. Examples: Revenue > 100 and Region == '
-  "'West', or `Order Date` >= '2026-01-01'. Pass an expression, not SQL or natural-language instructions. Omit to "
-  'keep the active workspace filter; pass an empty string to clear it and analyze all rows. When no workspace filter '
-  'exists, omission analyzes all rows.'
+  'Optional case-sensitive pandas DataFrame.query expression. Use exact column names and backticks around names '
+  "containing spaces. Example: Revenue > 100 and Region == 'West'. Pass an empty string to clear the filter."
 )
 
 
@@ -31,207 +37,277 @@ class StrictModel(BaseModel):
 
 
 class SampleDataset(StrictModel):
-  source: Literal['sample'] = Field(
-    description="Use TinyBI's included sample_data.csv. This source has no additional input fields."
-  )
+  source: Literal['sample'] = Field(description="Use TinyBI's included sample_data.csv.")
 
 
 class PathDataset(StrictModel):
-  source: Literal['path'] = Field(
-    description="Analyze a .csv file available inside TinyBI's permitted project directory."
-  )
-  path: str = Field(
-    min_length=1,
-    description=(
-      "Path to a .csv file that resolves inside TinyBI's permitted project directory. Relative and absolute paths "
-      'are accepted only when their resolved location remains inside that directory. Example: data/orders.csv.'
-    ),
-  )
+  source: Literal['path'] = Field(description='Use a project-local CSV path.')
+  path: str = Field(min_length=1, description='CSV path whose resolved location remains inside this project.')
 
 
 class InlineDataset(StrictModel):
-  source: Literal['inline'] = Field(description='Analyze CSV text supplied directly in this tool call.')
-  inline_csv: str = Field(
-    min_length=1,
-    description=(
-      'Complete CSV text, including its header row. Use this when the data is not available through a permitted '
-      'server-local path. The configured input-size limit applies.'
-    ),
-  )
+  source: Literal['inline'] = Field(description='Use complete CSV text supplied in this call.')
+  inline_csv: str = Field(min_length=1, description='Complete CSV text including its header row.')
 
 
 DatasetInput = Annotated[SampleDataset | PathDataset | InlineDataset, Field(discriminator='source')]
 Aggregation = Literal['sum', 'mean', 'median', 'min', 'max', 'count']
-ChartType = Literal['auto', 'bar', 'line']
 SortMode = Literal['label_asc', 'label_desc', 'value_asc', 'value_desc']
 Section = Literal['metrics', 'charts', 'insights', 'preview']
 
 
+class GroupedDefinitionBase(StrictModel):
+  title: str | None = Field(default=None, description='Optional display title; omit for a generated title.')
+  x_column: str = Field(min_length=1, description='Exact case-sensitive grouping column.')
+  y_column: str = Field(min_length=1, description='Exact detected numeric measure.')
+  aggregation: Aggregation = Field(default='sum', description='Grouped aggregation applied to y_column.')
+  filter_query: str | None = Field(default=None, description=FILTER_DESCRIPTION)
+  sort_by: SortMode | None = Field(default=None, description='Group ordering; omit for a type-appropriate default.')
+  limit: int = Field(default=20, ge=1, le=CHART_LIMIT, description='Maximum grouped labels returned.')
+
+
+class BarDefinition(GroupedDefinitionBase):
+  type: Literal['bar'] = Field(description='Grouped vertical bar chart.')
+
+
+class LineDefinition(GroupedDefinitionBase):
+  type: Literal['line'] = Field(description='Grouped line chart.')
+
+
+class ScatterDefinition(StrictModel):
+  type: Literal['scatter'] = Field(description='Ungrouped numeric X/Y scatter plot.')
+  title: str | None = Field(default=None, description='Optional display title; omit for a generated title.')
+  x_column: str = Field(min_length=1, description='Exact detected numeric measure for the X axis.')
+  y_column: str = Field(min_length=1, description='Exact detected numeric measure for the Y axis.')
+  filter_query: str | None = Field(default=None, description=FILTER_DESCRIPTION)
+  limit: int = Field(default=50, ge=1, le=CHART_LIMIT, description='Maximum source-order points returned.')
+
+
+class HeatmapDefinition(StrictModel):
+  type: Literal['heatmap'] = Field(description='Two-dimensional grouped matrix heatmap.')
+  title: str | None = Field(default=None, description='Optional display title; omit for a generated title.')
+  x_column: str = Field(min_length=1, description='Exact grouping column for the horizontal axis.')
+  y_column: str = Field(min_length=1, description='Exact grouping column for the vertical axis.')
+  value_column: str = Field(min_length=1, description='Exact detected numeric measure represented by color.')
+  aggregation: Aggregation = Field(default='sum', description='Aggregation applied within each X/Y cell.')
+  filter_query: str | None = Field(default=None, description=FILTER_DESCRIPTION)
+  x_limit: int = Field(default=10, ge=1, le=HEATMAP_AXIS_LIMIT, description='Maximum horizontal categories.')
+  y_limit: int = Field(default=10, ge=1, le=HEATMAP_AXIS_LIMIT, description='Maximum vertical categories.')
+
+
+ChartDefinition = Annotated[
+  BarDefinition | LineDefinition | ScatterDefinition | HeatmapDefinition,
+  Field(discriminator='type'),
+]
+
+
+class ChartUpdate(StrictModel):
+  id: int = Field(ge=1, description='Existing managed chart ID to preserve.')
+  definition: ChartDefinition = Field(description='Complete replacement definition for this chart.')
+
+
 class Visibility(StrictModel):
-  show_metrics: bool = Field(description='Whether browser and MCP consumers should show dashboard metrics.')
-  show_charts: bool = Field(description='Whether browser and MCP consumers should show dashboard charts.')
-  show_insights: bool = Field(description='Whether browser and MCP consumers should show deterministic insights.')
-  show_preview: bool = Field(description='Whether browser and MCP consumers should show the bounded row preview.')
+  show_metrics: bool
+  show_charts: bool
+  show_insights: bool
+  show_preview: bool
 
 
 class Controls(StrictModel):
-  filter_query: str | None = Field(description='Currently committed pandas query, or null when all rows are used.')
-  x_column: str | None = Field(description='Currently committed exact grouping column, or null if unavailable.')
-  y_column: str | None = Field(description='Currently committed numeric measure, or null if unavailable.')
-  aggregation: str = Field(description='Currently committed grouped aggregation.')
-  chart_type: str = Field(description='Currently committed resolved Chart.js chart type.')
-  sort_by: str | None = Field(description='Currently committed group ordering mode.')
-  limit: int = Field(description='Currently committed maximum chart groups.', ge=1, le=50)
+  filter_query: str | None
+  x_column: str | None
+  y_column: str | None
+  aggregation: Aggregation
+  chart_type: Literal['auto', 'bar', 'line']
+  sort_by: SortMode | None
+  limit: int = Field(ge=1, le=CHART_LIMIT)
+
+
+class EffectiveControls(Controls):
+  chart_type: Literal['bar', 'line']
 
 
 class Workspace(StrictModel):
-  revision: int = Field(
-    description=(
-      'Monotonically increasing shared-state revision. Browser and MCP results with the same revision describe the '
-      'same committed dashboard state. inspect_dataset does not increment it.'
-    ),
-    ge=0,
-  )
-  last_updated_by: Literal['browser', 'mcp'] | None = Field(
-    description='Interface that most recently committed the shared state: browser or mcp. Null before the first state-changing action.'
-  )
-  active_source: str | None = Field(
-    description=(
-      'Safe label for the dataset currently active in the shared workspace. Absolute server paths and inline CSV '
-      'content are never returned.'
-    )
-  )
-  visibility: Visibility = Field(description='Shared metrics/charts/insights/preview visibility configuration.')
-  controls: Controls = Field(description='Currently committed filter/X/Y/aggregation/chart/sort/limit values.')
+  incarnation: str = Field(description='Process-lifetime workspace identity used with revision to prevent restart ABA.')
+  revision: int = Field(ge=0, description='Monotonic revision within this incarnation.')
+  last_updated_by: Literal['browser', 'mcp'] | None
+  active_source: str | None
+  dataset_generation: int = Field(ge=0)
+  visibility: Visibility
+  requested_controls: Controls
+  managed_chart_ids: list[int]
 
 
 class Metadata(StrictModel):
-  encoding: str = Field(description='Text encoding successfully used after TinyBI applied its documented fallback order.')
-  row_count: int = Field(description='Number of non-blank CSV data rows; the header is not counted.', ge=0)
-  column_count: int = Field(description='Number of CSV columns detected from the header.', ge=1)
-  dates: list[str] = Field(description='Columns coerced to dates and suitable for chronological grouping or filtering.')
-  measures: list[str] = Field(description='Numeric aggregation columns; identifier-like numeric fields are excluded.')
-  dimensions: list[str] = Field(description='Non-measure columns suitable for grouping, categorization, or filtering.')
-  identifiers: list[str] = Field(description='Columns heuristically identified as record/entity IDs, postal codes, SKUs, or codes.')
-
-
-class ValidOptions(StrictModel):
-  x_columns: list[str] = Field(description='Exact case-sensitive values accepted by x_column.')
-  y_columns: list[str] = Field(description='Detected measures accepted by y_column.')
-  aggregations: list[str] = Field(description='Server-supported grouped aggregation values.')
-  chart_types: list[str] = Field(description='Server-supported Chart.js chart type choices.')
-  sort_modes: list[str] = Field(description='Server-supported grouped-result ordering modes.')
-  limit_bounds: dict[str, int] = Field(description='Inclusive minimum and maximum supported group limits.')
-
-
-class InspectOutput(StrictModel):
-  workspace: Workspace = Field(
-    description='Current shared browser/MCP workspace identity and synchronization metadata. This contains bounded state metadata, not raw CSV content.'
-  )
-  inspected_source: str = Field(description='Safe label for the dataset inspected; it can differ from workspace.active_source.')
-  metadata: Metadata = Field(
-    description=(
-      "Compact facts about the parsed dataset and TinyBI's inferred column roles. Role detection is heuristic and "
-      "should be verified against the user's domain knowledge when necessary."
-    )
-  )
-  missing_values: dict[str, int] = Field(description='Mapping from every column name to its missing-value count.')
-  date_ranges: dict[str, dict[str, str]] = Field(description='Earliest and latest ISO dates for detected date columns.')
-  category_summaries: dict[str, dict[str, int]] = Field(description='Bounded observed category frequencies for selected dimensions.')
-  filter_examples: list[str] = Field(description='One or two executable case-sensitive pandas-query expressions from actual values.', max_length=2)
-  valid_options: ValidOptions = Field(description='Dataset-specific columns and server-supported controls accepted by analysis tools.')
+  encoding: str
+  row_count: int = Field(ge=0)
+  column_count: int = Field(ge=1)
+  dates: list[str]
+  measures: list[str]
+  dimensions: list[str]
+  identifiers: list[str]
 
 
 class AnalysisMetadata(Metadata):
-  row_count_before_filter: int = Field(description='Number of non-blank rows before applying filter_query.', ge=0)
-  row_count_after_filter: int = Field(description='Number of rows retained after applying filter_query.', ge=0)
+  row_count_before_filter: int = Field(ge=0)
+  row_count_after_filter: int = Field(ge=0)
+
+
+class ValidOptions(StrictModel):
+  x_columns: list[str]
+  y_columns: list[str]
+  grouping_columns: list[str]
+  aggregations: list[Aggregation]
+  automatic_chart_types: list[Literal['auto', 'bar', 'line']]
+  managed_chart_types: list[Literal['bar', 'line', 'scatter', 'heatmap']]
+  sort_modes: list[SortMode]
+  limit_bounds: dict[str, int]
+  heatmap_axis_limit: int
+  heatmap_cell_limit: int
+
+
+class GroupedChart(StrictModel):
+  id: str | int | None
+  scope: Literal['automatic', 'managed']
+  title: str
+  type: Literal['bar', 'line']
+  labels: list[str] = Field(max_length=CHART_LIMIT)
+  values: list[int | float | None] = Field(max_length=CHART_LIMIT)
+
+
+class ScatterPoint(StrictModel):
+  x: int | float | None
+  y: int | float | None
+
+
+class ScatterChart(StrictModel):
+  id: int | None
+  scope: Literal['managed']
+  title: str
+  type: Literal['scatter']
+  x_column: str
+  y_column: str
+  points: list[ScatterPoint] = Field(max_length=CHART_LIMIT)
+
+
+class HeatmapCell(StrictModel):
+  x: str
+  y: str
+  value: int | float | None
+
+
+class HeatmapChart(StrictModel):
+  id: int | None
+  scope: Literal['managed']
+  title: str
+  type: Literal['heatmap']
+  x_column: str
+  y_column: str
+  value_column: str
+  x_labels: list[str] = Field(max_length=HEATMAP_AXIS_LIMIT)
+  y_labels: list[str] = Field(max_length=HEATMAP_AXIS_LIMIT)
+  cells: list[HeatmapCell]
+
+
+ChartPayload = Annotated[GroupedChart | ScatterChart | HeatmapChart, Field(discriminator='type')]
 
 
 class Metric(StrictModel):
-  label: str = Field(description='Short metric name.')
-  value: int | float | str | None = Field(description='JSON-native calculated value, before display formatting.')
-  display_value: str = Field(description='Human-readable rendering of value.')
-  hint: str = Field(description='What TinyBI calculated.')
+  label: str
+  value: int | float | str | None
+  display_value: str
+  hint: str
 
 
-class Chart(StrictModel):
-  id: str = Field(description='Stable identifier within this dashboard response.')
-  title: str = Field(description='Human-readable grouped-analysis title.')
-  type: Literal['bar', 'line'] = Field(description='Chart.js chart type.')
-  labels: list[str] = Field(description='Ordered group labels; labels[i] corresponds to values[i].', max_length=50)
-  values: list[int | float | None] = Field(description='Ordered aggregates; values[i] corresponds to labels[i].', max_length=50)
+class InspectOutput(StrictModel):
+  workspace: Workspace
+  inspected_source: str
+  metadata: Metadata
+  missing_values: dict[str, int]
+  date_ranges: dict[str, dict[str, str]]
+  category_summaries: dict[str, dict[str, int]]
+  filter_examples: list[str] = Field(max_length=2)
+  valid_options: ValidOptions
 
 
 class AnalyzeOutput(StrictModel):
-  workspace: Workspace = Field(description='Current shared browser/MCP workspace identity and synchronization metadata. This contains bounded state metadata, not raw CSV content.')
-  metadata: AnalysisMetadata = Field(description='Parsing and row-count facts for this analysis, including filtering.')
-  effective_config: Controls = Field(description='Resolved analysis choices TinyBI actually used after applying defaults.')
-  defaults: Controls = Field(description='Alias of effective_config retained for browser compatibility.')
-  columns: dict[str, Any] = Field(description='Exact detected column names and their inferred analysis roles.')
-  returned_sections: list[Section] = Field(description='Result sections explicitly included in this response.')
-  metrics: list[Metric] = Field(description='Requested machine-readable summary metrics; empty when omitted or unavailable.')
-  charts: list[Chart] = Field(description='Requested bounded Chart.js-compatible specifications, not rendered images.')
-  insights: list[str] = Field(description='Requested deterministic observations without causal or significance claims.')
-  preview: list[dict[str, Any]] = Field(description='Up to 10 normalized filtered rows; dates are strings and missing values are null.', max_length=10)
-  filter_examples: list[str] = Field(description='One or two executable filter examples based on this dataset.', max_length=2)
-  config: Visibility = Field(description='Shared dashboard section visibility retained for browser API compatibility.')
+  workspace: Workspace
+  metadata: AnalysisMetadata
+  requested_config: Controls
+  effective_config: EffectiveControls
+  defaults: EffectiveControls
+  columns: dict[str, Any]
+  returned_sections: list[Section]
+  metrics: list[Metric]
+  charts: list[ChartPayload]
+  insights: list[str]
+  preview: list[dict[str, Any]] = Field(max_length=10)
+  filter_examples: list[str] = Field(max_length=2)
+  config: Visibility
 
 
-class RowCounts(StrictModel):
-  before_filter: int = Field(description='Number of non-blank source rows before filter_query.', ge=0)
-  after_filter: int = Field(description='Number of source rows retained for aggregation.', ge=0)
+class ManagedChart(StrictModel):
+  id: int = Field(ge=1)
+  title: str
+  definition: ChartDefinition
+  chart: ChartPayload | None = None
 
 
-class ChartOutput(StrictModel):
-  workspace: Workspace = Field(description='Current shared browser/MCP workspace identity and synchronization metadata. This contains bounded state metadata, not raw CSV content.')
-  effective_config: Controls = Field(description='Exact configuration used to produce the chart after resolving defaults.')
-  row_counts: RowCounts = Field(description='Source-row counts before and after filtering, not aggregate-group counts.')
-  chart: Chart = Field(description='One bounded Chart.js-compatible grouped aggregation; it is not an image.')
-  table: list[dict[str, Any]] = Field(description='Bounded aggregate records in chart order; dynamic keys match X and Y columns.', max_length=50)
+class ChartListOutput(StrictModel):
+  workspace: Workspace
+  charts: list[ManagedChart]
+
+
+class DeleteOutput(StrictModel):
+  workspace: Workspace
+  deleted_ids: list[int]
+
+
+class ReorderOutput(StrictModel):
+  workspace: Workspace
+  ordered_ids: list[int]
 
 
 def resolve_dataset(dataset: DatasetInput | None):
   if dataset is None:
     return None, None
-  if dataset.source == 'sample':
-    return SAMPLE_PATH.read_bytes(), 'sample_data.csv'
-  if dataset.source == 'inline':
-    return dataset.inline_csv.encode('utf-8'), 'inline CSV'
-  candidate = Path(dataset.path)
-  resolved = (BASE_DIR / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
-  if resolved.suffix.lower() != '.csv':
-    raise AnalysisError(f'Invalid dataset.path {dataset.path!r}; select a .csv file inside the project directory.')
-  if not resolved.is_relative_to(BASE_DIR):
-    raise AnalysisError('Invalid dataset.path; path reads are restricted to CSV files inside the TinyBI project directory.')
-  if not resolved.is_file():
-    raise AnalysisError(f'Invalid dataset.path {dataset.path!r}; the CSV file does not exist.')
-  if resolved.stat().st_size > MAX_INPUT_BYTES:
-    raise AnalysisError(f'The CSV exceeds the {MAX_INPUT_BYTES / 1024 / 1024:g} MB input limit.', 413)
-  return resolved.read_bytes(), resolved.name
+  try:
+    if dataset.source == 'sample':
+      return SAMPLE_PATH.read_bytes(), 'sample_data.csv'
+    if dataset.source == 'inline':
+      return dataset.inline_csv.encode('utf-8'), 'inline CSV'
+    candidate = Path(dataset.path)
+    resolved = (BASE_DIR / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
+    if resolved.suffix.lower() != '.csv':
+      raise AnalysisError(f'Invalid dataset.path {dataset.path!r}; select a .csv file inside the project directory.')
+    if not resolved.is_relative_to(BASE_DIR):
+      raise AnalysisError('Invalid dataset.path; path reads are restricted to CSV files inside the TinyBI project directory.')
+    if not resolved.is_file():
+      raise AnalysisError(f'Invalid dataset.path {dataset.path!r}; the CSV file does not exist.')
+    if resolved.stat().st_size > MAX_INPUT_BYTES:
+      raise AnalysisError(f'The CSV exceeds the {MAX_INPUT_BYTES / 1024 / 1024:g} MB input limit.', 413)
+    return resolved.read_bytes(), resolved.name
+  except OSError as exc:
+    raise AnalysisError('The selected CSV could not be read; verify that it exists and is readable.') from exc
+
+
+def model_dict(value):
+  return value.model_dump()
 
 
 def create_mcp(store: DashboardStore):
   mcp = FastMCP(
     'TinyBI 2',
     instructions=(
-      'TinyBI provides three CSV analytics tools connected to one shared browser/MCP dashboard workspace. Omit '
-      'dataset to use what is currently open; an explicit dataset on analyze_dataset or create_chart replaces the '
-      'active source after successful validation. inspect_dataset never changes state. Use analyze_dataset for a '
-      'broad dashboard and create_chart for one explicit aggregation. Successful state-changing calls are reflected '
-      'in the browser and return a new revision.'
+      'TinyBI exposes one versioned browser/MCP CSV workspace. Inspect before mutating to obtain the current '
+      'incarnation and revision. Automatic dashboard charts are disposable; managed charts have monotonic integer '
+      'IDs, survive same-dataset analysis, and are cleared by explicit dataset replacement.'
     ),
     mask_error_details=True,
   )
 
   @mcp.tool(
-    description=(
-      'Discover how TinyBI can analyze a CSV without changing the shared dashboard. Omit dataset to inspect the '
-      'dataset currently open in the browser or selected by an earlier MCP call; if none exists, TinyBI inspects '
-      'its sample. Supply dataset only to inspect another source without making it active. Use this when exact '
-      'column names, inferred roles, missingness, ranges, or filter syntax are unknown. Returns compact metadata, '
-      'valid choices, filter examples, and the current workspace revision; it does not return dashboard sections, '
-      'raw rows, or charts.'
-    ),
+    description='Inspect an explicit or active CSV without changing workspace state. Returns roles, valid choices, and the current workspace version.',
     annotations=dict(title='Inspect CSV dataset', readOnlyHint=True, destructiveHint=False, openWorldHint=False),
   )
   def inspect_dataset(
@@ -244,64 +320,94 @@ def create_mcp(store: DashboardStore):
       raise ToolError(str(exc)) from exc
 
   @mcp.tool(
-    description=(
-      "Run TinyBI's broad automatic dashboard workflow and publish the result to the shared browser/MCP workspace. "
-      'Omit dataset to analyze what is currently open; supply dataset to replace the active source after successful '
-      'validation. Use this for an overview, metrics, automatic charts, deterministic insights, or a preview. Use '
-      'create_chart for one explicit X/Y aggregation. Returns bounded results, effective settings, and the committed '
-      'workspace revision; the browser will display the same state.'
-    ),
+    description='Publish a broad automatic dashboard. Omitting dataset preserves managed charts; an explicit replacement clears them atomically.',
     annotations=dict(title='Analyze CSV dashboard', readOnlyHint=False, destructiveHint=False, openWorldHint=False),
   )
   def analyze_dataset(
+    expected_incarnation: Annotated[str, Field(min_length=1, description=VERSION_DESCRIPTION)],
+    expected_revision: Annotated[int, Field(ge=0, description=VERSION_DESCRIPTION)],
     dataset: Annotated[DatasetInput | None, Field(description=DATASET_DESCRIPTION)] = None,
     filter_query: Annotated[str | None, Field(description=FILTER_DESCRIPTION)] = None,
-    sections: Annotated[
-      set[Section] | None,
-      Field(
-        min_length=1,
-        max_length=4,
-        description=(
-          'Selects which dashboard payloads to return. Omit or pass null to return metrics, charts, insights, and '
-          'preview. Metadata, detected columns, effective configuration, and filter examples are always returned.'
-        ),
-      ),
-    ] = None,
+    sections: Annotated[set[Section] | None, Field(min_length=1, max_length=4, description='Dashboard sections to return.')] = None,
   ) -> AnalyzeOutput:
     try:
       content, label = resolve_dataset(dataset)
-      result = store.analyze(content, label, dict(filter_query=filter_query), list(sections) if sections else None, 'mcp')
+      ordered_sections = [section for section in SECTIONS if not sections or section in sections]
+      result = store.analyze(
+        expected_incarnation, expected_revision, content, label, dict(filter_query=filter_query), ordered_sections, 'mcp',
+      )
       return AnalyzeOutput.model_validate(result)
     except AnalysisError as exc:
       raise ToolError(str(exc)) from exc
 
   @mcp.tool(
-    description=(
-      'Create one focused grouped chart and publish it to the shared browser/MCP workspace. Omit dataset to use what '
-      'is currently open; supply dataset to replace the active source after successful validation. Use this for '
-      'explicit filtering, X/Y columns, aggregation, chart type, sorting, or group limit. Inspect first if valid '
-      'columns are unknown. Returns the effective configuration, row counts, aligned chart data, bounded aggregate '
-      'table, and committed workspace revision; it does not return raw rows or the full automatic dashboard.'
-    ),
-    annotations=dict(title='Create focused chart', readOnlyHint=False, destructiveHint=False, openWorldHint=False),
+    description='List managed chart IDs, order, titles, and definitions without changing state. Rendered bounded chart data is optional.',
+    annotations=dict(title='List managed charts', readOnlyHint=True, destructiveHint=False, openWorldHint=False),
   )
-  def create_chart(
-    x_column: Annotated[str, Field(min_length=1, description='Exact, case-sensitive CSV column used to group rows and produce chart labels. Date columns create time groups; dimensions and identifiers create category groups. Use a value from inspect_dataset.valid_options.x_columns.')],
-    y_column: Annotated[str, Field(min_length=1, description='Exact, case-sensitive detected numeric measure aggregated within each X-column group. Identifier-like numeric columns are not valid measures. Use a value from inspect_dataset.valid_options.y_columns.')],
+  def list_charts(
+    include_data: Annotated[bool, Field(description='Include bounded rendered chart payloads.')] = False,
+  ) -> ChartListOutput:
+    return ChartListOutput.model_validate(store.list_charts(include_data))
+
+  @mcp.tool(
+    description='Atomically add one or more managed charts. IDs increase monotonically and are never reused. An explicit dataset replaces the active source and clears old charts.',
+    annotations=dict(title='Create managed charts', readOnlyHint=False, destructiveHint=False, openWorldHint=False),
+  )
+  def create_charts(
+    definitions: Annotated[list[ChartDefinition], Field(min_length=1, max_length=CHART_BATCH_LIMIT, description='Strict type-specific chart definitions.')],
+    expected_incarnation: Annotated[str, Field(min_length=1, description=VERSION_DESCRIPTION)],
+    expected_revision: Annotated[int, Field(ge=0, description=VERSION_DESCRIPTION)],
     dataset: Annotated[DatasetInput | None, Field(description=DATASET_DESCRIPTION)] = None,
-    filter_query: Annotated[str | None, Field(description=FILTER_DESCRIPTION)] = None,
-    aggregation: Annotated[Aggregation, Field(description='Operation applied to y_column values inside each x_column group. count counts non-missing Y values rather than all source rows.')] = 'sum',
-    chart_type: Annotated[ChartType, Field(description='Chart.js chart type for the returned specification. auto resolves to line when X is a detected date and bar otherwise. The result is structured chart data, not a rendered image.')] = 'auto',
-    sort_by: Annotated[SortMode | None, Field(description='Controls aggregated-group order. Label modes sort by X labels; date labels are chronological. Value modes sort by the aggregated Y result. Omit to use chronological ascending labels for date X columns and descending aggregate values otherwise.')] = None,
-    limit: Annotated[int, Field(ge=1, le=50, description='Maximum number of aggregated groups returned after filtering, grouping, and sorting. This limits chart points or bars, not source rows. The aggregate table uses the same bound and order.')] = 20,
-  ) -> ChartOutput:
+  ) -> ChartListOutput:
     try:
       content, label = resolve_dataset(dataset)
-      controls = dict(
-        filter_query=filter_query, x_column=x_column, y_column=y_column, aggregation=aggregation,
-        chart_type=chart_type, sort_by=sort_by, limit=limit,
+      result = store.create_charts(
+        [model_dict(item) for item in definitions], expected_incarnation, expected_revision, content, label, 'mcp',
       )
-      return ChartOutput.model_validate(store.create_chart(controls, content, label, 'mcp'))
+      return ChartListOutput.model_validate(result)
+    except AnalysisError as exc:
+      raise ToolError(str(exc)) from exc
+
+  @mcp.tool(
+    description='Atomically replace definitions for selected managed chart IDs while preserving those IDs and all untouched charts.',
+    annotations=dict(title='Update managed charts', readOnlyHint=False, destructiveHint=False, openWorldHint=False),
+  )
+  def update_charts(
+    updates: Annotated[list[ChartUpdate], Field(min_length=1, max_length=CHART_BATCH_LIMIT, description='Unique chart IDs and complete replacement definitions.')],
+    expected_incarnation: Annotated[str, Field(min_length=1, description=VERSION_DESCRIPTION)],
+    expected_revision: Annotated[int, Field(ge=0, description=VERSION_DESCRIPTION)],
+  ) -> ChartListOutput:
+    try:
+      values = [dict(id=item.id, definition=model_dict(item.definition)) for item in updates]
+      return ChartListOutput.model_validate(store.update_charts(values, expected_incarnation, expected_revision, 'mcp'))
+    except AnalysisError as exc:
+      raise ToolError(str(exc)) from exc
+
+  @mcp.tool(
+    description='Atomically delete selected managed charts. Deleted IDs are never reused during this process lifetime.',
+    annotations=dict(title='Delete managed charts', readOnlyHint=False, destructiveHint=True, openWorldHint=False),
+  )
+  def delete_charts(
+    ids: Annotated[list[int], Field(min_length=1, description='Unique managed chart IDs to delete.')],
+    expected_incarnation: Annotated[str, Field(min_length=1, description=VERSION_DESCRIPTION)],
+    expected_revision: Annotated[int, Field(ge=0, description=VERSION_DESCRIPTION)],
+  ) -> DeleteOutput:
+    try:
+      return DeleteOutput.model_validate(store.delete_charts(ids, expected_incarnation, expected_revision, 'mcp'))
+    except AnalysisError as exc:
+      raise ToolError(str(exc)) from exc
+
+  @mcp.tool(
+    description='Atomically set managed chart order. ids must contain every current managed ID exactly once.',
+    annotations=dict(title='Reorder managed charts', readOnlyHint=False, destructiveHint=False, openWorldHint=False),
+  )
+  def reorder_charts(
+    ids: Annotated[list[int], Field(description='Complete desired managed chart ID order.')],
+    expected_incarnation: Annotated[str, Field(min_length=1, description=VERSION_DESCRIPTION)],
+    expected_revision: Annotated[int, Field(ge=0, description=VERSION_DESCRIPTION)],
+  ) -> ReorderOutput:
+    try:
+      return ReorderOutput.model_validate(store.reorder_charts(ids, expected_incarnation, expected_revision, 'mcp'))
     except AnalysisError as exc:
       raise ToolError(str(exc)) from exc
 

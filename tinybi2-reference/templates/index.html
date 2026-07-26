@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="/static/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
   </head>
   <body>
     <main class="shell">
@@ -17,7 +18,7 @@
           <p class="lede">Explore a local CSV in the browser or through MCP. Both interfaces publish to the same live dashboard.</p>
           <div class="hero-actions">
             <button id="sampleBtn" class="button primary" type="button">Load sample data</button>
-            <a class="button ghost" href="/sample-data?download=true">Download sample CSV</a>
+            <a class="button ghost" href="/sample-data">Download sample CSV</a>
           </div>
         </div>
         <div class="hero-card">
@@ -68,7 +69,8 @@
         <section id="previewSection" class="section hidden"><div class="section-heading"><p class="eyebrow">Normalized</p><h2>CSV preview</h2></div><div class="table-wrap"><table id="previewTable"></table></div></section>
       </div>
     </main>
-    <script>window.initialConfig = {{ config | tojson }};</script>
+    <script>window.initialConfig = {{ config | tojson }}; window.initialWorkspace = {{ workspace | tojson }};</script>
+    <script src="/static/app-core.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>
