@@ -5,6 +5,15 @@
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
       "enabled": true
+    },
+    "rapidapi_aerodatabox": {
+      "type": "remote",
+      "url": "https://mcp.rapidapi.com",
+      "headers": {
+        "x-api-host": "aerodatabox.p.rapidapi.com",
+        "x-api-key": "{env:RAPIDAPI_KEY}"
+      },
+      "enabled": false
     }
   },
   "permission": {
@@ -38,6 +47,7 @@
       "mypy *": "allow",
       "fvm *": "allow"
     },
-    "context7*": "allow"
+    "context7*": "allow",
+    "rapidapi_aerodatabox*": "allow"
   }
 }

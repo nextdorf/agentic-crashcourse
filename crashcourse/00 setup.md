@@ -23,7 +23,7 @@ That history brings us to the practical question for this workshop: which tools 
 
 ## Setup
 
-Install `opencode` and `uv` before the workshop, and make sure you have a code editor available. Any other coding CLI is fine as well. In [the next chapter](./01%20opencode.md#claude-code-codex-cli-and-antigravity-cli) I will mention some alternatives. We will connect OpenCode to a model in Chapter 1 and use `uv` to manage the Python project in Chapter 2.
+Install `opencode`, `uv`, and `node.js` before the workshop, and make sure you have a code editor available. Any other coding CLI is fine as well. In [the next chapter](./01%20opencode.md#claude-code-codex-cli-and-antigravity-cli) I will mention some alternatives. We will connect OpenCode to a model in Chapter 1, use `uv` to manage the Python project in Chapter 2, and use `npx` in chapter 3 to analyse a mcp server.
 
 ### OpenCode
 
@@ -87,6 +87,19 @@ Restart the terminal if the installation changed `PATH`, then verify `uv` and in
 ```bash
 uv --version
 uv python install 3.14 # or alternatively version 3.13
+```
+
+### npx
+
+
+[`npm`](https://docs.npmjs.com/about-npm) and [`npx`](https://docs.npmjs.com/cli/v12/commands/npx) are the JavaScript pondants to Python's `uv`. One of the tool we see later was written in TypeScript and we need `npx` to execute it. `npm` and `npx` come bundled with the JavaScript runner `Node.js`. You can download a binary version from here: https://nodejs.org/en/download
+
+After installation verify that the tools are found (you might have to restart the shell/update the `PATH` variable):
+
+```bash
+node --version # v22.23.1
+npm --version # 12.0.1
+npx --version # 12.0.1
 ```
 
 ### VS Code (Optional)

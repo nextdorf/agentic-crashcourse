@@ -1,0 +1,335 @@
+# MCP Servers
+
+The Model Context Protocol (MCP) provides a standard way for AI clients to connect to external tools and data sources. Instead of teaching every coding agent a custom API integration, an MCP server describes the tools it offers, the parameters they accept, and the results they return.
+
+In this chapter, we will connect the AeroDataBox MCP server to a coding agent, inspect its tools, call one manually, and then let an LLM choose and call the same tool. To follow along, you need a RapidAPI account and an API key with access to AeroDataBox. Keep that key private.
+
+## Connecting the MCP server to your coding agent
+
+**OpenCode:**
+
+```json
+{
+  "mcp": {
+    "RapidAPI/AeroDataBox": {
+      "type": "remote",
+      "url": "https://mcp.rapidapi.com",
+      "headers": {
+        "x-api-host": "aerodatabox.p.rapidapi.com",
+        "x-api-key": "{env:RAPIDAPI_KEY}"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+Note the `"{env:RAPIDAPI_KEY}"`. It reads the API key from the environment variable called `RAPIDAPI_KEY`. However, as of today, there is no way to automatically load the environment variable from a file, but [there is an open GitHub issue](https://github.com/anomalyco/opencode/issues/10458). Alternatively, you can either hard-code `"x-api-key": "YOUR_API_KEY"` or export the environment variable before running OpenCode with `set -a && . .opencode/.env && set +a`.
+
+Hard-coding the key is only okay if you do not share or commit your `opencode.json`. I publish mine on GitHub, so I use an environment variable instead.
+
+**Other coding agents:**
+
+```json
+{
+  "mcpServers": {
+    "rapidapi_aerodatabox": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.rapidapi.com",
+        "--header",
+        "x-api-host: aerodatabox.p.rapidapi.com",
+        "--header",
+        "x-api-key: YOUR_API_KEY"
+      ]
+    }
+  }
+}
+```
+
+If you get prompted to approve an MCP tool and would like to automatically approve any tool call to this specific MCP server, add the following to `opencode.json`:
+
+```json
+{
+  "permission": {
+    "rapidapi_aerodatabox_*": "allow"
+  }
+}
+```
+
+In general, the tool call name is `[name of MCP server]_[name of tool]`. With `[name of MCP server]_*`, you automatically approve calls to any tool from that server.
+
+
+## MCP Inspector
+
+Launch `npx @modelcontextprotocol/inspector`. If you run the command for the first time, it might ask you to install the tool. You can find out more about the tool in [the npm registry](https://www.npmjs.com/package/@modelcontextprotocol/inspector) and on [its website](https://modelcontextprotocol.io/docs/tools/inspector). The website also has great resources for developing your own MCP server and understanding the technical side of the protocol. When launched, the output should look something like:
+
+```bash
+npm notice run npx
+npm notice run 'mcp-inspector'
+Starting MCP inspector...
+⚙️ Proxy server listening on localhost:6277
+🔑 Session token: <SOME_TOKEN>
+   Use this token to authenticate requests or set DANGEROUSLY_OMIT_AUTH=true to disable auth
+
+🚀 MCP Inspector is up and running at:
+   http://localhost:6274/?MCP_PROXY_AUTH_TOKEN=<SOME_TOKEN>
+
+🌐 Opening browser...
+```
+
+The MCP Inspector will serve its frontend as a local website at `http://localhost:6274`. Open it in your browser. To connect to the MCP server, enter:
+
+Key | Value
+----|------
+Transport Type | HTTP
+URL | https://mcp.rapidapi.com
+Connection Type | Proxy
+
+Under Authentication/Custom Header, enter:
+```json
+{
+  "x-api-host": "aerodatabox.p.rapidapi.com",
+  "x-api-key": "YOUR_API_KEY"
+}
+```
+
+The parameters you set here are equivalent to the parameters you already saw in the [previous section](#connecting-the-mcp-server-to-your-coding-agent).
+
+In the end, it should look like:
+
+![Configuration of the MCP-Inspector for `npx @modelcontextprotocol/inspector --transport http --server-url https://mcp.rapidapi.com --header x-api-host: aerodatabox.p.rapidapi.com x-api-key: $RAPIDAPI_KEY`](images/03%20inspector.png)
+
+### Tools
+
+The MCP Inspector can be used to look at the endpoints of an MCP server the way an LLM would see them. It also allows you to call the individual tools manually. The main use case is to develop and debug your own MCP server. However, you can also use it to inspect any other MCP server on the internet and better understand how your AI might interact with it.
+
+The AeroDataBox MCP exposes 40 `"tools"`. When the LLM requests the tool list of an MCP server, it gets back a JSON object with the following information about each tool:
+* **name** - The MCP equivalent of an API endpoint
+* **description** - A prompt for the LLM to better understand that tool. Some MCP servers just copy and paste the API docs of the corresponding API endpoint here. That is lazy and often leads to poor results, as the description and the name of the tool serve as the main context for deciding when and how to call that tool. A better description is written like a prompt with the LLM in mind. At the very least, it should answer what the tool is meant to achieve and help the AI identify what kind of user request probably requires calling this tool.
+* **inputSchema** - A definition of the payload that the LLM should send. The parameters can optionally also have descriptions that provide relevant context to the LLM.
+* **required** - The required input parameters.
+
+This is what the tool list of the AeroDataBox MCP server looks like:
+
+```json
+{
+  "tools": [
+    {
+      "name": "Flight_time__Distance_between_airports__TIER_2",
+      "description": "**What is the great circle distance between airports?** \n**What is approximate flight time between airports?**\n**What is the flight time between airports based on history of flights and/or aircraft type?** (machine-learning based)\n\nUse `flightTimeModel = ML01` to get more accurate results based on historical performance of flights on route and aircraft type.\n\nReturns: Distance and approximate flight time between airports, if both airports found.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "_endpoint": {
+            "default": "/airports/{codeType}/{codeFrom}/distance-time/{codeTo}",
+            "description": "Endpoint: GET /airports/{codeType}/{codeFrom}/distance-time/{codeTo}",
+            "hidden": true,
+            "type": "string"
+          },
+          "_method": {
+            "default": "GET",
+            "description": "HTTP method",
+            "hidden": true,
+            "type": "string"
+          },
+          "aircraftName": {
+            "default": "Airbus A320",
+            "description": "Aircraft type name (free text). If specified and `flightTimeModel` is set to `ML01`, the aircraft type will be attempted to be taken into account in order to provide a more accurate result (experimental). If `flightTimeModel` is set to `Standard`, the value is ignored.",
+            "externalDocs": {
+              "description": "",
+              "url": ""
+            },
+            "in": "query",
+            "type": "string"
+          },
+          "codeFrom": {
+            "default": "LHR",
+            "description": "If `codeType` is:\n* `icao`, then this field must be a 4-character ICAO-code of the origin airport (e.g.: EHAM, KLAX, UUEE, etc.);\n* `iata`, then this field must be a 3-character IATA-code of the origin airport (e.g.: AMS, SFO, LAX, etc.).",
+            "externalDocs": {
+              "description": "",
+              "url": ""
+            },
+            "in": "path",
+            "type": "string"
+          },
+          "codeTo": {
+            "default": "LAX",
+            "description": "If `codeType` is:\n* `icao`, then this field must be a 4-character ICAO-code of the destination airport (e.g.: EHAM, KLAX, UUEE, etc.);\n* `iata`, then this field must be a 3-character IATA-code of the destination  airport (e.g.: AMS, SFO, LAX, etc.).",
+            "externalDocs": {
+              "description": "",
+              "url": ""
+            },
+            "in": "path",
+            "type": "string"
+          },
+          "codeType": {
+            "description": "Type of code to search airport by (IATA or ICAO)",
+            "externalDocs": {
+              "description": "",
+              "url": ""
+            },
+            "in": "path",
+            "type": "string"
+          },
+          "flightTimeModel": {
+            "default": "Standard,ML01",
+            "description": "Model of calculation of the flight time. \n\nPossible values:\n\n`Standard`: Standard model of calculation which takes into account the great circle distance and the average speed of all aircraft typically operating on those distances.\n`ML01`: Experimental machine learning (ML) model, which attempts to provide more accurate prediction of the flight time by taking into account the history of flights on specified route and aircraft type within the recent year.\nThis may come in handy in case when on certain routes flights take significant detours due to extended airspace closures dictated by war conflicts, sanction regulations, etc. This can result in significantly increased flight times comparing to regular estimations.\nOr, some routes generally experience longer delays than other routes of the same distance.\nThis model attempts to take such factors into account and reflect it in the prediction.\nIf a model cannot be applied due to lack of historical and/or aircraft data or prediction is too off set, it automatically fallbacks to `Standard`.",
+            "externalDocs": {
+              "description": "",
+              "url": ""
+            },
+            "in": "query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "codeType",
+          "codeTo",
+          "codeFrom"
+        ]
+      }
+    },
+    // 39 other tools
+  ]
+}
+```
+
+_One thing you may note is the sheer amount of text for just one tool. With all 40 tools, the entire tool list would be **2159 lines long!** It's important to keep that in mind, especially for smaller models, because the AI might load that entire JSON object with the tool list into context just to decide whether it makes sense to call a tool. Most LLMs which have been released within the last year can handle that, but with older or very small models you will see that adding more MCP servers will decrease the AI's quality because the context window gets filled with mostly irrelevant information. When writing an MCP server, it is important to balance adding enough context in the description in case the tool should be called and avoiding too much context in case the tool should not be called._
+
+Anyway, we can now inspect that tool by selecting `Flight_time__Distance_between_airports__TIER_2` and filling in the missing fields:
+
+```json
+{
+  "_endpoint": "/airports/{codeType}/{codeFrom}/distance-time/{codeTo}",
+  "_method": "GET",
+  "aircraftName": "Airbus A320",
+  "codeFrom": "LHR",
+  "codeTo": "LAX",
+  "codeType": "IATA",
+  "flightTimeModel": "Standard,ML01"
+}
+```
+
+If everything is correct and your API key is valid, you should see the following output:
+
+```json
+{
+  "from": {
+    "icao": "EGLL",
+    "iata": "LHR",
+    "name": "London Heathrow",
+    "shortName": "Heathrow",
+    "municipalityName": "London",
+    "location": {
+      "lat": 51.4706,
+      "lon": -0.461941
+    },
+    "countryCode": "GB",
+    "timeZone": "Europe/London"
+  },
+  "to": {
+    "icao": "KLAX",
+    "iata": "LAX",
+    "name": "Los Angeles",
+    "shortName": "Los Angeles",
+    "municipalityName": "Los Angeles",
+    "location": {
+      "lat": 33.9425,
+      "lon": -118.408
+    },
+    "countryCode": "US",
+    "timeZone": "America/Los_Angeles"
+  },
+  "greatCircleDistance": {
+    "meter": 8780646.41,
+    "km": 8780.65,
+    "mile": 5456.04,
+    "nm": 4741.17,
+    "feet": 28807895.05
+  },
+  "approxFlightTime": "14:10:00"
+}
+```
+
+If the LLM receives a response from the MCP server, then the above JSON object will be exactly what is loaded into its context. This is part of the reason why it is generally a good idea to have a separate MCP server alongside an API. Although the API of a service and the MCP server of a service should expose the same functionality, the idiomatic way to access this functionality is very different.
+
+In our coding CLI, we can request the same information in prose:
+
+```opencode
+> Whats the approximate flighttime from LHR -> LAX with plane Airbus A320?
+
++ Thought: Defining distance-time endpoint requirements · 1.2s
+
+⚙rapidapi_aerodatabox_Flight_time__Distance_between_airports__TIER_2 [codeType=iata, codeFrom=LHR, codeTo=LAX, aircraftName=Airbus A320, flightTimeModel=ML01]
+
+The approximate flight time from LHR to LAX on an Airbus A320 is 14 hours 10 minutes.
+Distance: approximately 8,781 km.
+```
+
+You can see that Codex (GPT-5.6 Luna) correctly figured out that it should call the tool `rapidapi_aerodatabox_Flight_time__Distance_between_airports__TIER_2` and set the parameters `codeType=iata`, `codeFrom=LHR`, `codeTo=LAX`, `aircraftName=Airbus A320`, and `flightTimeModel=ML01`. In our prompt, we did not specify the `codeType` or `flightTimeModel`. Going back to the tool specification, you see:
+
+```json
+  "codeType": {
+    "description": "Type of code to search airport by (IATA or ICAO)",
+    // ...
+  },
+  "flightTimeModel": {
+    "default": "Standard,ML01",
+    "description": "Model of calculation of the flight time. \n\nPossible values:\n\n`Standard`: Standard model of calculation which takes into account the great circle distance and the average speed of all aircraft typically operating on those distances.\n`ML01`: Experimental machine learning (ML) model, which attempts to provide more accurate prediction of the flight time by taking into account the history of flights on specified route and aircraft type within the recent year.\nThis may come in handy in case when on certain routes flights take significant detours due to extended airspace closures dictated by war conflicts, sanction regulations, etc. This can result in significantly increased flight times comparing to regular estimations.\nOr, some routes generally experience longer delays than other routes of the same distance.\nThis model attempts to take such factors into account and reflect it in the prediction.\nIf a model cannot be applied due to lack of historical and/or aircraft data or prediction is too off set, it automatically fallbacks to `Standard`.",
+    // ...
+  }
+```
+
+That means it figured out on its own that the provided code is in IATA format, and for the `flightTimeModel`, it decided that `ML01` is a better choice than `Standard`. The reasoning that led to these decisions happened in `+ Thought: Defining distance-time endpoint requirements · 1.2s`. If the inference provider allows it, OpenCode can show the reasoning. OpenAI used to send the reasoning tokens as well but stopped doing so at some point.
+
+For demonstration purposes, let's change the model to something that actually exposes the reasoning and ask the same question in a new chat. In my case, I chose `Kimi K3` via OpenCode Go:
+
+```opencode
+> Whats the approximate flighttime from LHR -> LAX with plane Airbus A320?
+
++ Thought: 6.2s
+
+⚙rapidapi_aerodatabox_Flight_time__Distance_between_airports__TIER_2 [codeType=iata, codeFrom=LHR, codeTo=LAX, aircraftName=Airbus A320, flightTimeModel=ML01]
+
++ Thought: 4.7s
+
+Based on the flight data, the approximate flight time from LHR (London Heathrow) to LAX (Los Angeles) is:
+- Duration: ~14 hours 10 minutes
+- Distance: ~8,781 km (5,456 miles)
+
+Note: While you asked about the Airbus A320 specifically, this aircraft typically doesn't operate this route in real-world service. The A320 family has a maximum range of roughly 6,100–6,300 km (depending on variant), which is insufficient for this ~8,800 km transatlantic journey. This route is normally flown by wide-body aircraft such as the Boeing 787, Airbus A350, or Boeing 777. The 14h10m estimate appears to be based on the great-circle distance and standard speed assumptions for this route type.
+```
+
+Opening the thoughts reveals the reasoning:
+
+1.  `Thought: 6.2s`
+    ```opencode
+    The user is asking about the approximate flight time from LHR (London Heathrow) to LAX (Los Angeles) with an Airbus A320. This is a factual question about flight duration.
+
+    I have access to an MCP tool that can calculate flight time and distance between airports. Let me use the rapidapi_aerodatabox_Flight_time__Distance_between_airports__TIER_2 tool to get this information.
+
+    I need to provide:
+    - codeType: "iata" (since LHR and LAX are IATA codes)
+    - codeFrom: "LHR"
+    - codeTo: "LAX"
+    - aircraftName: "Airbus A320" (optional, but the user specified it)
+    - flightTimeModel: "ML01" would be more accurate as it takes aircraft type into account
+
+    Let me call this tool to get the flight time information.
+    ```
+2.  `Thought: 4.7s`
+    ```opencode
+    The API returned:
+    - Great circle distance: 8,780.65 km (5,456.04 miles)
+    - Approximate flight time: 14:10:00 (14 hours 10 minutes)
+
+    However, I should note that the ML01 model with Airbus A320 might not have been applicable here - the response just shows the standard calculation. An A320 typically wouldn't fly LHR-LAX as it's a narrow-body aircraft with limited range (typically around 6,100 km for the A320neo, less for older models), while this route is about 8,780 km. This route is typically flown by wide-body aircraft like Boeing 787, Airbus A350, or Boeing 777.
+
+    But the user asked specifically about A320, so I should provide the answer while noting that an A320 wouldn't typically operate this route due to range limitations.
+    ```
+
+In the first block, we can see Kimi's "inner monologue", which basically prompts itself to provide better output. How a model makes this decision and whether it would or could use reasoning at all are quite model-dependent. The inference provider controls whether OpenCode receives the actual reasoning, a summary, some filler text, or nothing. Interestingly, it decided to put that result into context and highlight that the returned information is probably not factual.
+
+A more detailed overview of tools for a generic MCP server can be found in the [MCP specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool). In general, an MCP server may also expose [resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources) and [prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts), but the AeroDataBox MCP does not.

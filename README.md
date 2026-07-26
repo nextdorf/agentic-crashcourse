@@ -11,3 +11,4 @@ This workshop itself has largely been written with AI, in particular with OpenCo
 - [0) Setup](crashcourse/00%20setup.md)
 - [1) Opencode](crashcourse/01%20opencode.md)
 - [2) Let's get our hands dirty](crashcourse/02%20let%27s%20get%20our%20hands%20dirty.md)
+- [3) MCP Servers](crashcourse/03%20MCP%20servers.md)
