@@ -17,31 +17,40 @@ This is a simplified history rather than a claim that each phase neatly replaced
 
 ### Attention, but not the whole story
 
-The 2017 paper [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) introduced the Transformer architecture. Its central move was to use attention so a model could relate different positions in a sequence without relying on the recurrent structures common at the time. Transformers scaled extraordinarily well and became the foundation for the large language models behind current coding assistants.
+The 2017 paper [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) introduced the Transformer architecture. The core idea was to use **attention** so a model could relate different positions in a sequence without relying on the recurrent structures common at the time. Transformers scaled extraordinarily well and became the foundation for the large language models behind current coding assistants.
 
 That history brings us to the practical question for this workshop: which tools do we need to work with a coding agent ourselves?
 
 ## Setup
 
-Install OpenCode and `uv` before the workshop, and make sure you have a code editor available. We will connect OpenCode to a model in Chapter 1 and use `uv` to manage the Python project in Chapter 2.
+Install `opencode` and `uv` before the workshop, and make sure you have a code editor available. Any other coding CLI is fine as well. In [the next chapter](./01%20opencode.md#claude-code-codex-cli-and-antigravity-cli) I will mention some alternatives. We will connect OpenCode to a model in Chapter 1 and use `uv` to manage the Python project in Chapter 2.
 
 ### OpenCode
 
-Use a package manager appropriate for your system:
+Use the download option for your system from the [Opencode Website](https://opencode.ai/download). The coding agent comes as TUI for the terminal and as desktop version for all operating sytems. Neither is better than the other, just choose what you are more comfortable with:
 
-```bash
-# macOS or Linux with Homebrew
-brew install anomalyco/tap/opencode
+* Terminal
+  ```bash
+  # OS-agnostic
+  bun add -g opencode-ai # requires bun
+  # npm i -g opencode-ai # alternatively to bun, you can use npm
 
-# Windows with Chocolatey
-choco install opencode
+  # macOS or Linux with Homebrew
+  brew install anomalyco/tap/opencode
 
-# Windows with Scoop
-scoop install opencode
+  # Windows with Scoop
+  scoop install opencode # or alternatively using choco
 
-# Arch Linux
-sudo pacman -S opencode
-```
+  # Arch Linux
+  sudo pacman -Syu opencode
+
+  # In a Docker container
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+  _In general I'd advise against running any `curl ... | bash` commands_
+* Desktop
+
+  Download from their website: https://opencode.ai/download
 
 Other installation options and release binaries are listed in the [official OpenCode documentation](https://opencode.ai/docs/). Verify the installation, then start OpenCode from the repository root:
 
@@ -54,20 +63,21 @@ You do not need to choose or purchase a model yet. Chapter 1 walks through the p
 
 ### uv
 
-[`uv`](https://docs.astral.sh/uv/) manages the Python version, virtual environment, and dependencies used later in the workshop. Install it with a package manager where possible:
+[`uv`](https://docs.astral.sh/uv/) manages the Python version, virtual environment, and dependencies used later in the workshop. You could of course also use `pip` or `poetry`, but for all the python code in this repository I will use `uv`. Install it with a package manager where possible:
 
 ```bash
+# Any system with pipx already available
+pipx install uv
+
+# Any system with a compatible Rust toolchain
+cargo install --locked uv
+
 # Windows
 winget install --id=astral-sh.uv -e
 
 # macOS with Homebrew
 brew install uv
 
-# Any system with pipx already available
-pipx install uv
-
-# Any system with a compatible Rust toolchain
-cargo install --locked uv
 ```
 
 The Rust route compiles `uv` from source and is mainly useful if you already have the toolchain. If none of these package managers are available, download a binary from the project's [GitHub releases](https://github.com/astral-sh/uv/releases); we deliberately do not pipe remote installation scripts into a shell.
@@ -81,7 +91,7 @@ uv python install 3.14 # or alternatively version 3.13
 
 ### VS Code (Optional)
 
-You should have an IDE or code editor for inspecting the project and reviewing the agent's changes, but the workshop does not depend on a particular one. Keep using PyCharm, Zed, Vim, or another editor if it already works for you; VS Code is the documented default because it is familiar to many learners and integrates directly with OpenCode.
+You should have an IDE or code editor for inspecting the project and reviewing the agent's changes, but the workshop does not depend on a particular one. Keep using `PyCharm` or another editor if it already works for you.
 
 Download the installer for Windows, macOS, or Linux from the [official VS Code download page](https://code.visualstudio.com/Download) and follow the platform instructions. On Debian or Ubuntu, you can install a downloaded `.deb` package with:
 
