@@ -15,9 +15,9 @@
       },
       "enabled": false
     },
-    "tinybi": {
+    "my_mcp": {
       "type": "remote",
-      "url": "http://127.0.0.1:8000/mcp",
+      "url": "http://127.0.0.1:8000/mcp/",
       "enabled": true
     }
   },

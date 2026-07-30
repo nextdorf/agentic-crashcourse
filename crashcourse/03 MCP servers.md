@@ -63,7 +63,7 @@ In general, the tool call name is `[name of MCP server]_[name of tool]`. With `[
 
 ## MCP Inspector
 
-Launch `npx @modelcontextprotocol/inspector`. If you run the command for the first time, it might ask you to install the tool. You can find out more about the tool in [the npm registry](https://www.npmjs.com/package/@modelcontextprotocol/inspector) and on [its website](https://modelcontextprotocol.io/docs/tools/inspector). The website also has great resources for developing your own MCP server and understanding the technical side of the protocol. When launched, the output should look something like:
+Launch `npx @modelcontextprotocol/inspector` (while writing this section the mcp inspector was updated to version 2 and had some bugs, if you want to stay with version 1 use `npx @modelcontextprotocol/inspector@1.0.0` instead). If you run the command for the first time, it might ask you to install the tool. You can find out more about the tool in [the npm registry](https://www.npmjs.com/package/@modelcontextprotocol/inspector) and on [its website](https://modelcontextprotocol.io/docs/tools/inspector). The website also has great resources for developing your own MCP server and understanding the technical side of the protocol. When launched, the output should look something like:
 
 ```bash
 npm notice run npx
@@ -334,6 +334,205 @@ In the first block, we can see Kimi's "inner monologue", which basically prompts
 
 A more detailed overview of tools for a generic MCP server can be found in the [MCP specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool). In general, an MCP server may also expose [resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources) and [prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts), but the AeroDataBox MCP does not.
 
+
+## TicTacToe over MCP
+```bash
+uv init tictactoe-mcp
+```
+
+```bash
+cd tictactoe-mcp
+uv add fastapi fastmcp uvicorn
+uv add --dev ipykernel # For using the Jupyter extension within VS Code
+```
+
+
+```python
+class TicTacToe:
+  def __init__(self):
+    self.board = [[' ' for _ in range(3)] for _ in range(3)]
+    self.player1 = 'X'
+    self.player2 = 'O'
+  def __repr__(self) -> str:
+    return '\n-+-+-\n'.join('|'.join(row) for row in self.board)
+TicTacToe()
+```
+
+Add functionality:
+
+```python
+class TicTacToe:
+  def __init__(self):
+    self.board = [[' ' for _ in range(3)] for _ in range(3)]
+    self.player1 = 'X'
+    self.player2 = 'O'
+    self.next_player = 1
+    self.winner = None
+  def play(self, x: int, y: int, player: int):
+    if self.winner is not None:
+      raise ValueError(f'{self.winner} already won')
+    if player != self.next_player:
+      raise ValueError('Not your turn')
+    if x not in range(3) or y not in range(3):
+      raise ValueError('Invalid move')
+    if self.board[x][y] != ' ':
+      raise ValueError('Square already taken')
+    self.board[y][x] = self.player1 if player == 1 else self.player2
+    if self.check_for_game_over():
+      self.winner = f'Player {player}'
+    else:
+      self.next_player = 2 if player == 1 else 1
+    summary = f'Player {player} played at ({x}, {y})'
+    summary += ' and won.' if self.winner is not None else f'. Now is Player {self.next_player}\'s turn.'
+    result = {
+      'board': self.board,
+      'next_player': self.next_player,
+      'winner': self.winner,
+      'summary': summary,
+    }
+    return result
+  def check_for_game_over(self):
+    for i in range(3):
+      if self.board[i][0] == self.board[i][1] == self.board[i][2] != ' ':
+        return True
+      if self.board[0][i] == self.board[1][i] == self.board[2][i] != ' ':
+        return True
+    if self.board[0][0] == self.board[1][1] == self.board[2][2] != ' ':
+      return True
+    if self.board[0][2] == self.board[1][1] == self.board[2][0] != ' ':
+      return True
+    return False
+```
+
+Let's play a few moves to test it:
+```python
+b = TicTacToe()
+print(b.play(1,1,1)['summary'])
+print(b.play(0,2,2)['summary'])
+print(b)
+```
+> ```text
+> Player 1 played at (1, 1). Now is Player 2's turn.
+> Player 2 played at (0, 2). Now is Player 1's turn.
+> ┌─┬─┬─┐
+> │ │ │ │
+> ├─┼─┼─┤
+> │ │X│ │
+> ├─┼─┼─┤
+> │O│ │ │
+> └─┴─┴─┘
+> ```
+
+### Super short introduction into FastAPI
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+async def root():
+  return {"message": "Hello World"}
+```
+
+```bash
+uv run uvicorn main:app --reload
+```
+
+Visit `http://127.0.0.1:8000` to see your site.
+
+Visit `http://127.0.0.1:8000/docs` for the swagger page. It is an auto-generated overview of your API. Alternatively, there is also `http://127.0.0.1:8000/redoc` for a Redocs page.
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+app.state.game = TicTacToe()
+
+@app.post("/play")
+async def play(x: int, y: int, player: int):
+  return app.state.game.play(x, y, player)
+```
+
+When you save, uvicorn will detect the file change and automatically recreate the app. This means state will be lost. In a serious project we handle the state differently and for example store it in a database. But for a quick test, this is fine.
+
+One problem the above snippet has is that errors are not handled correctly. The TicTacToe class has proper error handling but when we do an illegal move the app will just crash. Instead we need to "re-raise" the error as a `HTTPException`. A statuscode 4xx generally tells the client, that the request was not successful:
+
+```python
+from fastapi import FastAPI, HTTPException
+
+# ...
+
+@app.post("/play")
+async def play(x: int, y: int, player: int):
+  try:
+    return app.state.game.play(x, y, player)
+  except Exception as e:
+    raise HTTPException(status_code=400, detail=str(e)) from e
+```
+
+In order to add an mcp server next to the fastapi server add the following code:
+```python
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
+
+mcp = FastMCP('TicTacToe')
+@mcp.tool
+def mcp_summarize_game():
+  'Returns a summary of the game. Does not change the game state. You should use this to get the current state of the game. Call this tool in the beginning of the game and when the state has changed.'
+  return app.state.game.as_dict()
+
+@mcp.tool
+def mcp_play(x: int, y: int, player: int):
+  'Make a single move'
+  try:
+    return app.state.game.play(x, y, player)
+  except Exception as e:
+    raise ToolError(str(e)) from e
+
+mcp_app = mcp.http_app(path='/')
+
+
+# Add the mcp server's lifespan to your FastAPI app
+# This important so the FastAPI knows that it must start and shutdown the MCP server on its own start and shut down
+app = FastAPI(title='TicTacToe', lifespan=mcp_app.lifespan)
+
+app.mount('/mcp', mcp_app)
+```
+
+and add the following function to the TicTacToe class:
+
+```python
+class TicTacToe:
+  # ...
+  def as_dict(self):
+    return {
+      'board': self.board,
+      'player1': self.player1,
+      'player2': self.player2,
+      'next_player': self.next_player,
+      'winner': self.winner,
+    }
+```
+
+Now you can instruct the AI to play against you over the browser. Or you can start to instances and let them play together. Just note that with this API layout both you and the AI can simply cheat by making a move for the opposing player as well.
+
+### Inspect with MCP inspector
+
+Like before, run the inspector via `npx @modelcontextprotocol/inspector` (or `npx @modelcontextprotocol/inspector@1.0.0`) and enter:
+
+Key | Value
+----|------
+Transport Type | HTTP
+URL | https://127.0.0.1:8000/mcp/
+Connection Type | Proxy
+
+No authetification needed this time.
+
+Change to the tools section and open `http://localhost:8000/docs` in a seperate tab. Verify that the changes you make either on the mcp-inspector or in the swagger interface are visible on the other interface as well. Also taking a look at the terminal output from running `uv run uvicorn main:app --reload` helps to understand what requests are made.
+
+### Pydantic
+
+### Final touch
 
 ## TinyBI 2
 ```opencode

@@ -1,6 +1,6 @@
 # TinyBI
 
-TinyBI is a small local FastAPI dashboard for exploring CSV files. Upload a CSV and it automatically detects likely date, numeric, and categorical columns to show summary metrics, charts, a preview table, and short plain-English insights.
+TinyBI is a small local FastAPI dashboard for exploring CSV files. Upload a CSV and it automatically detects likely date, numeric, and categorical columns to show summary metrics, charts, a preview table, and short plain-English insights. A sample dataset from https://www.kaggle.com/datasets/vivek468/superstore-dataset-final is included
 
 ## Install
 
