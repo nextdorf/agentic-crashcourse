@@ -108,12 +108,11 @@ The MCP Inspector can be used to look at the endpoints of an MCP server the way 
 The AeroDataBox MCP exposes 40 `"tools"`. When the LLM requests the tool list of an MCP server, it gets back a JSON object with the following information about each tool:
 * **name** - The MCP equivalent of an API endpoint
 * **description** - A prompt for the LLM to better understand that tool. Some MCP servers just copy and paste the API docs of the corresponding API endpoint here. That is lazy and often leads to poor results, as the description and the name of the tool serve as the main context for deciding when and how to call that tool. A better description is written like a prompt with the LLM in mind. At the very least, it should answer what the tool is meant to achieve and help the AI identify what kind of user request probably requires calling this tool.
-* **inputSchema** - A definition of the payload that the LLM should send. The parameters can optionally also have descriptions that provide relevant context to the LLM.
-* **required** - The required input parameters.
+* **inputSchema** - A definition of the payload that the LLM should send. The parameters can optionally also have descriptions that provide relevant context to the LLM. Its `required` field lists the required input parameters.
 
 This is what the tool list of the AeroDataBox MCP server looks like:
 
-```json
+```jsonc
 {
   "tools": [
     {
@@ -270,7 +269,7 @@ Distance: approximately 8,781 km.
 
 You can see that Codex (GPT-5.6 Luna) correctly figured out that it should call the tool `rapidapi_aerodatabox_Flight_time__Distance_between_airports__TIER_2` and set the parameters `codeType=iata`, `codeFrom=LHR`, `codeTo=LAX`, `aircraftName=Airbus A320`, and `flightTimeModel=ML01`. In our prompt, we did not specify the `codeType` or `flightTimeModel`. Going back to the tool specification, you see:
 
-```json
+```jsonc
   "codeType": {
     "description": "Type of code to search airport by (IATA or ICAO)",
     // ...
@@ -342,9 +341,11 @@ uv init tictactoe-mcp
 
 ```bash
 cd tictactoe-mcp
-uv add fastapi fastmcp uvicorn
+uv add fastapi fastmcp pydantic uvicorn
 uv add --dev ipykernel # For using the Jupyter extension within VS Code
 ```
+
+The project formally requires Python 3.13 or newer, but reducing the required version in `pyproject.toml` should work as well.
 
 
 ```python
@@ -375,7 +376,7 @@ class TicTacToe:
       raise ValueError('Not your turn')
     if x not in range(3) or y not in range(3):
       raise ValueError('Invalid move')
-    if self.board[x][y] != ' ':
+    if self.board[y][x] != ' ':
       raise ValueError('Square already taken')
     self.board[y][x] = self.player1 if player == 1 else self.player2
     if self.check_for_game_over():
@@ -453,9 +454,11 @@ async def play(x: int, y: int, player: int):
   return app.state.game.play(x, y, player)
 ```
 
+FastAPI interprets `x`, `y`, and `player` as query parameters. For example, `POST /play?x=1&y=1&player=1` places Player 1's mark in the center.
+
 When you save, uvicorn will detect the file change and automatically recreate the app. This means state will be lost. In a serious project we handle the state differently and for example store it in a database. But for a quick test, this is fine.
 
-One problem the above snippet has is that errors are not handled correctly. The TicTacToe class has proper error handling but when we do an illegal move the app will just crash. Instead we need to "re-raise" the error as a `HTTPException`. A statuscode 4xx generally tells the client, that the request was not successful:
+One problem the above snippet has is that errors are not handled correctly. If we make an illegal move, the uncaught `ValueError` becomes a 500 response for that request even though the client supplied an invalid move. Instead, we need to "re-raise" the error as an `HTTPException`. A 4xx status code generally tells the client that its request was not successful:
 
 ```python
 from fastapi import FastAPI, HTTPException
@@ -470,7 +473,7 @@ async def play(x: int, y: int, player: int):
     raise HTTPException(status_code=400, detail=str(e)) from e
 ```
 
-In order to add an mcp server next to the fastapi server add the following code:
+In order to add an MCP server next to the FastAPI server, add the following code:
 ```python
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
@@ -492,12 +495,16 @@ def mcp_play(x: int, y: int, player: int):
 mcp_app = mcp.http_app(path='/')
 
 
-# Add the mcp server's lifespan to your FastAPI app
-# This important so the FastAPI knows that it must start and shutdown the MCP server on its own start and shut down
+# Add the MCP server's lifespan to your FastAPI app
+# This is important so FastAPI starts and shuts down the MCP server with itself
 app = FastAPI(title='TicTacToe', lifespan=mcp_app.lifespan)
 
 app.mount('/mcp', mcp_app)
 ```
+
+This is an amendment to the FastAPI app we already built, not a second independent app. When you combine the snippets in `main.py`, replace the earlier `app = FastAPI()` initialization with the lifespan-aware version and keep the existing game state and routes attached to that app.
+
+The lifespan is required so FastMCP can initialize and shut down its HTTP session manager together with FastAPI.
 
 and add the following function to the TicTacToe class:
 
@@ -514,7 +521,7 @@ class TicTacToe:
     }
 ```
 
-Now you can instruct the AI to play against you over the browser. Or you can start to instances and let them play together. Just note that with this API layout both you and the AI can simply cheat by making a move for the opposing player as well.
+Now you can instruct the AI to play against you over the browser. Or you can start two AI clients and let them play together. The browser, Swagger UI, MCP Inspector, and connected AI clients all manipulate the same game in the running Uvicorn process. Reloading or restarting Uvicorn creates a new game. Just note that with this API layout both you and the AI can simply cheat by making a move for the opposing player as well.
 
 ### Inspect with MCP inspector
 
@@ -523,16 +530,16 @@ Like before, run the inspector via `npx @modelcontextprotocol/inspector` (or `np
 Key | Value
 ----|------
 Transport Type | HTTP
-URL | https://127.0.0.1:8000/mcp/
+URL | http://127.0.0.1:8000/mcp/
 Connection Type | Proxy
 
-No authetification needed this time.
+No authentication is needed this time.
 
-Change to the tools section and open `http://localhost:8000/docs` in a seperate tab. Verify that the changes you make either on the mcp-inspector or in the swagger interface are visible on the other interface as well. Also taking a look at the terminal output from running `uv run uvicorn main:app --reload` helps to understand what requests are made.
+Change to the Tools section and open `http://localhost:8000/docs` in a separate tab. Verify that the changes you make either in MCP Inspector or in the Swagger UI are visible in the other interface as well. Taking a look at the terminal output from running `uv run uvicorn main:app --reload` also helps you understand which requests are made.
 
 ### Pydantic
 
-One think you might wonder is how to actually add proper tool description. What you should see in the mcp-inspector at this point is that the docstring from the python function is visible in the tool-list, but what about the parameters and the return value? The answer is `pydantic`. Pydantic is a library which becomes useful whenever python's [weak typesystem](https://medium.com/@cpave3/understanding-types-static-vs-dynamic-strong-vs-weak-88a4e1f0ed5f) works against you. It is the standard way to do data validation and is used pretty much anywhere where you need to sanitize your input, which is always the case with APIs exposed to the internet. On top of data validation pydantic comes with other niceties as type annotations. Both FastAPI and FastMCP support these type annotions. Add the following code:
+One thing you might wonder is how to add proper tool descriptions. What you should see in MCP Inspector at this point is that the docstring from the Python function is visible in the tool list, but what about the parameters and the return value? The answer is Pydantic. Python's type hints do not validate runtime values on their own. Pydantic uses those hints to validate and serialize data and to generate JSON schemas. FastAPI and FastMCP use these schemas to describe inputs and outputs. Add the following code:
 
 ```python
 from typing import Annotated, Literal
@@ -575,7 +582,7 @@ def mcp_play(
   x: Annotated[int, Field(description='Column from left to right. 0 is the leftmost column.', ge=0, le=2)],
   y: Annotated[int, Field(description='Row from top to bottom. 0 is the top row.', ge=0, le=2)],
   player: Annotated[Literal[1, 2], Field(description='Player making this move. Player 1 uses X; Player 2 uses O.')],
-):
+) -> MoveResult:
   'Make one legal move at zero-indexed coordinates (x, y) and return the updated game state.'
   try:
     return app.state.game.play(x, y, player)
@@ -584,7 +591,7 @@ def mcp_play(
 
 ```
 
-If you now reconnect the mcp-inspector and list all tools you will see all that information. That being said, different mcp clients and coding agents can still decide on their own how much of that information they pass on to the AI. For exmaple as of now (opencode version 1.18.8), most of the information is stripped and all the AI actually sees is:
+If you now reconnect MCP Inspector and list all tools, you will see all that information. That being said, different MCP clients and coding agents can still decide on their own how much of that information they pass on to the AI. For example, as of now (OpenCode version 1.18.8), most of the information is stripped and all the AI actually sees is:
 
 ```json
 {
@@ -624,7 +631,7 @@ and
 }
 ```
 
-Nevertheless, the non-cosmetic annotations can still be useful. For example, as you see above the AI does not know that the board is only 3x3 big from the input-schema alone. So if you instruct it just do an illegal move and play at 5x5 for example, the request will reach the server. But with our new function signature the input data will never see our function body and gets stopped by pydantic. The uvicorn logs show the following error message:
+The tool annotations such as `readOnlyHint` and `idempotentHint` describe behavior to the client; they do not enforce the rules. The Pydantic constraints are what validate the values. For example, as you see above, the AI does not know that the board is only 3x3 from the input schema alone. If you instruct it to make an illegal move at 5x5, the request reaches the server, but with our new function signature Pydantic rejects the input before the function body runs. The Uvicorn logs show the following error message:
 
 ```bash
 [07/30/26 15:32:50] WARNING  Invalid arguments for tool 'mcp_play': [
@@ -652,7 +659,7 @@ These error messages come from `Field(..., ge=0, le=2)`. If we instead play anot
 [07/30/26 15:46:58] Error calling tool 'mcp_play'
 ```
 
-Equivalently you can also annotate your FastAPI endpoints. You will see the descriptions in the Swagger and Redocs interface but thats rather for debugging and documentation:
+Similarly, you can also annotate your FastAPI endpoints. You will see the descriptions in the Swagger UI and ReDoc, but that is primarily useful for debugging and documentation:
 
 ```python
 from fastapi import FastAPI, HTTPException, Query
@@ -688,11 +695,13 @@ async def play(
 
 ```
 
+These two interfaces report errors differently. FastMCP and Pydantic reject invalid tool arguments before `mcp_play` runs, while `ToolError` reports an invalid move from the game itself. FastAPI returns its automatic 422 response for invalid query parameters and our explicit 400 response when `TicTacToe.play` rejects a move.
+
 Visit http://localhost:8000/docs or http://localhost:8000/redoc or download http://localhost:8000/openapi.json to see the changes
 
 ### Final touch
 
-We came really far in quickly building a minimal TicTacToe game which can be connected to any LLM and play against it. If you would serve that server on the internet you could also connect it to your ChatGPT or Claude app and play from there. The one last thing that is missing is a proper interface. To keep things simple create a folder `static` and add a static webpage to it. As I know nothing about web development or design I will not give any advice here, but feel free to ask your AI to generate you something for your project (that's how I did it). In order to serve it add the following code to your FastAPI app and enjoy your a nice round Tic Tac Toe by visting `http://localhost:8000`:
+We came really far in quickly building a minimal TicTacToe game which can be connected to any LLM and play against it. If you would serve that server on the internet you could also connect it to your ChatGPT or Claude app and play from there. The one last thing that is missing is a proper interface. To keep things simple, create a folder `static` and add a static webpage to it. As I know nothing about web development or design I will not give any advice here, but feel free to ask your AI to generate something for your project (that's how I did it). In order to serve it, replace the earlier JSON route at `/` with the following code and enjoy a nice round of Tic Tac Toe by visiting `http://localhost:8000`:
 
 ```python
 from pathlib import Path
@@ -710,9 +719,12 @@ async def root():
 app.mount('/static', StaticFiles(directory=static_path), name='static')
 ```
 
-**<Add celebration emoji here> It works!** ...kinda. With everything you have learned so far you should be able to improve our minimal version. Maybe add a reset button? Maybe add a better solution for polling the game state? Maybe make sure that one can not make moves for the enemy player? But all of that is beyond this workshop's scope and left as an exercise for the reader :)
+The generated page in this example polls `/summarize` every second so moves made through MCP also appear in the browser.
 
-![Tic Tac Toe](images/03%20tic-tac-toe.png)
+**🥳 It works! 🎉** ...kinda. With everything you have learned so far you should be able to improve our minimal version. Maybe add a reset button? Maybe handle a draw when all squares are occupied without a winner? Maybe add a better solution for polling the game state? Maybe make sure that one can not make moves for the enemy player? But all of that is beyond this workshop's scope and left as an exercise for the reader 😁
+
+![The screenshot shows the browser reflecting moves made through either the HTTP API or MCP against that shared game state.](images/03%20tic-tac-toe.png)
+
 
 
 ## TinyBI 2

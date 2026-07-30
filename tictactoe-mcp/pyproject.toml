@@ -1,7 +1,7 @@
 [project]
 name = "tictactoe-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "Minimal Tic-Tac-Toe game exposed through FastAPI and MCP"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
