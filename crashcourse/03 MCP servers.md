@@ -532,6 +532,164 @@ Change to the tools section and open `http://localhost:8000/docs` in a seperate 
 
 ### Pydantic
 
+One think you might wonder is how to actually add proper tool description. What you should see in the mcp-inspector at this point is that the docstring from the python function is visible in the tool-list, but what about the parameters and the return value? The answer is `pydantic`. Pydantic is a library which becomes useful whenever python's [weak typesystem](https://medium.com/@cpave3/understanding-types-static-vs-dynamic-strong-vs-weak-88a4e1f0ed5f) works against you. It is the standard way to do data validation and is used pretty much anywhere where you need to sanitize your input, which is always the case with APIs exposed to the internet. On top of data validation pydantic comes with other niceties as type annotations. Both FastAPI and FastMCP support these type annotions. Add the following code:
+
+```python
+from typing import Annotated, Literal
+from pydantic import BaseModel, Field
+
+# ...
+
+class GameState(BaseModel):
+  board: list[list[Literal['X', 'O', ' ']]] = Field(
+    description='The three board rows from top to bottom. Each row contains three squares from left to right; a space represents an empty square.'
+  )
+  player1: Literal['X'] = Field(description='The mark used by Player 1.')
+  player2: Literal['O'] = Field(description='The mark used by Player 2.')
+  next_player: Literal[1, 2] = Field(description='The player who must make the next legal move.')
+  winner: Literal['Player 1', 'Player 2'] | None = Field(
+    description='The player who won, or null while the game is still in progress.'
+  )
+
+# ...
+
+@mcp.tool(annotations=dict(
+  title='Summarize Tic-Tac-Toe Game',
+  readOnlyHint=True,
+  destructiveHint=False,
+  idempotentHint=True,
+  openWorldHint=False,
+))
+def mcp_summarize_game() -> GameState:
+  'Returns a summary of the game. Does not change the game state. You should use this to get the current state of the game. Call this tool in the beginning of the game and when the state has changed.'
+  return GameState(**app.state.game.as_dict())
+
+@mcp.tool(annotations=dict(
+  title='Play Tic-Tac-Toe Move',
+  readOnlyHint=False,
+  destructiveHint=False,
+  idempotentHint=False,
+  openWorldHint=False,
+))
+def mcp_play(
+  x: Annotated[int, Field(description='Column from left to right. 0 is the leftmost column.', ge=0, le=2)],
+  y: Annotated[int, Field(description='Row from top to bottom. 0 is the top row.', ge=0, le=2)],
+  player: Annotated[Literal[1, 2], Field(description='Player making this move. Player 1 uses X; Player 2 uses O.')],
+):
+  'Make one legal move at zero-indexed coordinates (x, y) and return the updated game state.'
+  try:
+    return app.state.game.play(x, y, player)
+  except Exception as e:
+    raise ToolError(str(e)) from e
+
+```
+
+If you now reconnect the mcp-inspector and list all tools you will see all that information. That being said, different mcp clients and coding agents can still decide on their own how much of that information they pass on to the AI. For exmaple as of now (opencode version 1.18.8), most of the information is stripped and all the AI actually sees is:
+
+```json
+{
+  "name": "my_mcp_mcp_play",
+  "description": "Make one legal move at zero-indexed coordinates (x, y) and return the updated game state.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "x": {
+        "type": "integer",
+        "description": "Column from left to right. 0 is the leftmost column."
+      },
+      "y": {
+        "type": "integer",
+        "description": "Row from top to bottom. 0 is the top row."
+      },
+      "player": {
+        "type": "integer",
+        "enum": [1, 2],
+        "description": "Player making this move. Player 1 uses X; Player 2 uses O."
+      }
+    },
+    "required": ["x", "y", "player"]
+  }
+}
+```
+and
+```json
+{
+  "name": "my_mcp_mcp_summarize_game",
+  "description": "Returns a summary of the game. Does not change the game state. You should use this to get the current state of the game. Call this tool in the beginning of the game and when the state has changed.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  }
+}
+```
+
+Nevertheless, the non-cosmetic annotations can still be useful. For example, as you see above the AI does not know that the board is only 3x3 big from the input-schema alone. So if you instruct it just do an illegal move and play at 5x5 for example, the request will reach the server. But with our new function signature the input data will never see our function body and gets stopped by pydantic. The uvicorn logs show the following error message:
+
+```bash
+[07/30/26 15:32:50] WARNING  Invalid arguments for tool 'mcp_play': [
+  {
+    'type': 'less_than_equal',
+    'loc': ('x',),
+    'msg': 'Input should be less than or equal to 2',
+    'input': 5,
+server.py:1325
+    'ctx': {'le': 2}
+  },
+  {
+    'type': 'less_than_equal',
+    'loc': ('y',),
+    'msg': 'Input should be less than or equal to 2',
+    'input': 5,
+    'ctx': {'le': 2}
+  }
+]
+```
+
+These error messages come from `Field(..., ge=0, le=2)`. If we instead play another illegal move like playing on an occupied square, then the uvicorn logs show the error message propagated from re-raising the ValueError from `TicTacToe.play`
+
+```bash
+[07/30/26 15:46:58] Error calling tool 'mcp_play'
+```
+
+Equivalently you can also annotate your FastAPI endpoints. You will see the descriptions in the Swagger and Redocs interface but thats rather for debugging and documentation:
+
+```python
+from fastapi import FastAPI, HTTPException, Query
+
+# ...
+
+class MoveResult(BaseModel):
+  board: list[list[Literal['X', 'O', ' ']]] = Field(
+    description='The board after the move, with rows from top to bottom and columns from left to right.'
+  )
+  next_player: Literal[1, 2] = Field(description='The player who must make the next legal move.')
+  winner: Literal['Player 1', 'Player 2'] | None = Field(
+    description='The player who won, or null while the game is still in progress.'
+  )
+  summary: str = Field(description='Short human-readable description of the move outcome.')
+
+
+@app.get('/summarize')
+async def summarize() -> GameState:
+  return GameState(**app.state.game.as_dict())
+
+
+@app.post('/play')
+async def play(
+  x: Annotated[int, Query(description='Column from left to right. 0 is the leftmost column.', ge=0, le=2)],
+  y: Annotated[int, Query(description='Row from top to bottom. 0 is the top row.', ge=0, le=2)],
+  player: Annotated[int, Query(description='Player making this move. Player 1 uses X; Player 2 uses O.', ge=1, le=2)],
+) -> MoveResult:
+  try:
+    return MoveResult(**app.state.game.play(x, y, player))
+  except ValueError as exc:
+    raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+```
+
+Visit http://localhost:8000/docs or http://localhost:8000/redoc or download http://localhost:8000/openapi.json to see the changes
+
 ### Final touch
 
 ## TinyBI 2

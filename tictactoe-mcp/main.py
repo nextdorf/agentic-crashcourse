@@ -1,6 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from typing import Annotated, Literal
+
+from fastapi import FastAPI, HTTPException, Query
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from pydantic import BaseModel, Field
+
+
 
 class TicTacToe:
   def __init__(self):
@@ -16,7 +21,7 @@ class TicTacToe:
       raise ValueError('Not your turn')
     if x not in range(3) or y not in range(3):
       raise ValueError('Invalid move')
-    if self.board[x][y] != ' ':
+    if self.board[y][x] != ' ':
       raise ValueError('Square already taken')
     self.board[y][x] = self.player1 if player == 1 else self.player2
     if self.check_for_game_over():
@@ -64,19 +69,59 @@ class TicTacToe:
     return full
 TicTacToe()
 
-mcp = FastMCP('TicTacToe')
-@mcp.tool
-def mcp_summarize_game():
-  'Returns a summary of the game. Does not change the game state. You should use this to get the current state of the game. Call this tool in the beginning of the game and when the state has changed.'
-  return app.state.game.as_dict()
 
-@mcp.tool
-def mcp_play(x: int, y: int, player: int):
-  'Make a single move'
+class GameState(BaseModel):
+  board: list[list[Literal['X', 'O', ' ']]] = Field(
+    description='The three board rows from top to bottom. Each row contains three squares from left to right; a space represents an empty square.'
+  )
+  player1: Literal['X'] = Field(description='The mark used by Player 1.')
+  player2: Literal['O'] = Field(description='The mark used by Player 2.')
+  next_player: Literal[1, 2] = Field(description='The player who must make the next legal move.')
+  winner: Literal['Player 1', 'Player 2'] | None = Field(
+    description='The player who won, or null while the game is still in progress.'
+  )
+
+
+class MoveResult(BaseModel):
+  board: list[list[Literal['X', 'O', ' ']]] = Field(
+    description='The board after the move, with rows from top to bottom and columns from left to right.'
+  )
+  next_player: Literal[1, 2] = Field(description='The player who must make the next legal move.')
+  winner: Literal['Player 1', 'Player 2'] | None = Field(
+    description='The player who won, or null while the game is still in progress.'
+  )
+  summary: str = Field(description='Short human-readable description of the move outcome.')
+
+
+mcp = FastMCP('TicTacToe')
+@mcp.tool(annotations=dict(
+  title='Summarize Tic-Tac-Toe Game',
+  readOnlyHint=True,
+  destructiveHint=False,
+  idempotentHint=True,
+  openWorldHint=False,
+))
+def mcp_summarize_game() -> GameState:
+  'Returns a summary of the game. Does not change the game state. You should use this to get the current state of the game. Call this tool in the beginning of the game and when the state has changed.'
+  return GameState(**app.state.game.as_dict())
+
+@mcp.tool(annotations=dict(
+  title='Play Tic-Tac-Toe Move',
+  readOnlyHint=False,
+  destructiveHint=False,
+  idempotentHint=False,
+  openWorldHint=False,
+))
+def mcp_play(
+  x: Annotated[int, Field(description='Column from left to right. 0 is the leftmost column.', ge=0, le=2)],
+  y: Annotated[int, Field(description='Row from top to bottom. 0 is the top row.', ge=0, le=2)],
+  player: Annotated[Literal[1, 2], Field(description='Player making this move. Player 1 uses X; Player 2 uses O.')],
+) -> MoveResult:
+  'Make one legal move at zero-indexed coordinates (x, y) and return the updated game state.'
   try:
-    return app.state.game.play(x, y, player)
-  except Exception as e:
-    raise ToolError(str(e)) from e
+    return MoveResult(**app.state.game.play(x, y, player))
+  except ValueError as exc:
+    raise ToolError(str(exc)) from exc
 
 mcp_app = mcp.http_app(path='/')
 
@@ -89,11 +134,20 @@ app.state.game = TicTacToe()
 async def root():
   return {'message': 'Hello World'}
 
+@app.get('/summarize')
+async def summarize() -> GameState:
+  return GameState(**app.state.game.as_dict())
+
+
 @app.post('/play')
-async def play(x: int, y: int, player: int):
+async def play(
+  x: Annotated[int, Query(description='Column from left to right. 0 is the leftmost column.', ge=0, le=2)],
+  y: Annotated[int, Query(description='Row from top to bottom. 0 is the top row.', ge=0, le=2)],
+  player: Annotated[int, Query(description='Player making this move. Player 1 uses X; Player 2 uses O.', ge=1, le=2)],
+) -> MoveResult:
   try:
-    return app.state.game.play(x, y, player)
-  except Exception as e:
-    raise HTTPException(status_code=400, detail=str(e)) from e
+    return MoveResult(**app.state.game.play(x, y, player))
+  except ValueError as exc:
+    raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 app.mount('/mcp', mcp_app)
