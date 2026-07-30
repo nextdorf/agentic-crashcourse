@@ -335,9 +335,14 @@ A more detailed overview of tools for a generic MCP server can be found in the [
 
 
 ## TicTacToe over MCP
+
+Now we will build our own MCP server around a minimal TicTacToe game. We will start with the game logic, expose it through a regular HTTP API, add MCP tools on top, and finally connect both interfaces to the same game state.
+
 ```bash
 uv init tictactoe-mcp
 ```
+
+The following commands enter the new project, add its runtime dependencies, and add the optional development dependency we will use to test code interactively.
 
 ```bash
 cd tictactoe-mcp
@@ -346,6 +351,10 @@ uv add --dev ipykernel # For using the Jupyter extension within VS Code
 ```
 
 The project formally requires Python 3.13 or newer, but reducing the required version in `pyproject.toml` should work as well.
+
+Add the following code to `main.py`. The `__repr__` method defines how the object is represented when we inspect or print it, which gives us a quick way to see the board while developing.
+
+Try running the code in VS Code's Jupyter Interactive Window. For that you need the **Python** and **Jupyter** extensions. **Pylance** and **Python Debugger** are also generally useful for Python development, adding richer code completion and type information as well as debugging support.
 
 
 ```python
@@ -359,7 +368,7 @@ class TicTacToe:
 TicTacToe()
 ```
 
-Add functionality:
+Next, add the actual game logic: validating moves, enforcing alternating turns, placing marks, detecting a winner, and returning a short summary after every move.
 
 ```python
 class TicTacToe:
@@ -405,7 +414,8 @@ class TicTacToe:
     return False
 ```
 
-Let's play a few moves to test it:
+Let's play a few moves in the Jupyter Interactive Window to test it. Select the code and press `Shift+Enter`. Depending on your Jupyter extension settings, VS Code sends the selection either to the Interactive Window or to the Python terminal.
+
 ```python
 b = TicTacToe()
 print(b.play(1,1,1)['summary'])
@@ -425,6 +435,11 @@ print(b)
 > ```
 
 ### Super short introduction into FastAPI
+
+In general an API is a contract that lets software systems communicate without needing to know each other's internals. Most web APIs use HTTP: a client sends a request to an endpoint and receives a response, usually as JSON. It allows a frontend to talk to a backend.
+
+FastAPI is one of the most popular modern Python frameworks for building APIs. It uses standard Python type hints to define and validate inputs, serialize outputs, and generate an OpenAPI specification with interactive documentation. It also supports asynchronous code and offers high performance with relatively little boilerplate. In our example, FastAPI will expose the TicTacToe game through HTTP before we make the same functionality available as MCP tools.
+
 ```python
 from fastapi import FastAPI
 
@@ -502,7 +517,7 @@ app = FastAPI(title='TicTacToe', lifespan=mcp_app.lifespan)
 app.mount('/mcp', mcp_app)
 ```
 
-This is an amendment to the FastAPI app we already built, not a second independent app. When you combine the snippets in `main.py`, replace the earlier `app = FastAPI()` initialization with the lifespan-aware version and keep the existing game state and routes attached to that app.
+This is a change to the FastAPI app we already built, not a second independent app. When you combine the snippets in `main.py`, replace the earlier `app = FastAPI()` initialization with the lifespan-aware version and keep the existing game state and routes attached to that app.
 
 The lifespan is required so FastMCP can initialize and shut down its HTTP session manager together with FastAPI.
 
