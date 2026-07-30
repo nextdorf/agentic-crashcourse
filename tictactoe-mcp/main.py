@@ -1,10 +1,12 @@
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import BaseModel, Field
-
 
 
 class TicTacToe:
@@ -129,10 +131,11 @@ mcp_app = mcp.http_app(path='/')
 
 app = FastAPI(title='TicTacToe', lifespan=mcp_app.lifespan)
 app.state.game = TicTacToe()
+static_path = Path(__file__).parent / 'static'
 
 @app.get('/')
 async def root():
-  return {'message': 'Hello World'}
+  return FileResponse(static_path / 'index.html')
 
 @app.get('/summarize')
 async def summarize() -> GameState:
@@ -151,3 +154,5 @@ async def play(
     raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 app.mount('/mcp', mcp_app)
+app.mount('/static', StaticFiles(directory=static_path), name='static')
+

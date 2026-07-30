@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tic-Tac-Toe</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <main>
+      <h1>Tic-Tac-Toe</h1>
+      <p id="status" aria-live="polite">Loading game...</p>
+      <div class="board" aria-label="Tic-Tac-Toe board">
+        <button class="square" type="button" data-x="0" data-y="0" aria-label="Column 1, row 1"></button>
+        <button class="square" type="button" data-x="1" data-y="0" aria-label="Column 2, row 1"></button>
+        <button class="square" type="button" data-x="2" data-y="0" aria-label="Column 3, row 1"></button>
+        <button class="square" type="button" data-x="0" data-y="1" aria-label="Column 1, row 2"></button>
+        <button class="square" type="button" data-x="1" data-y="1" aria-label="Column 2, row 2"></button>
+        <button class="square" type="button" data-x="2" data-y="1" aria-label="Column 3, row 2"></button>
+        <button class="square" type="button" data-x="0" data-y="2" aria-label="Column 1, row 3"></button>
+        <button class="square" type="button" data-x="1" data-y="2" aria-label="Column 2, row 3"></button>
+        <button class="square" type="button" data-x="2" data-y="2" aria-label="Column 3, row 3"></button>
+      </div>
+      <p id="error" class="error" aria-live="assertive"></p>
+    </main>
+    <script>
+      const squares = document.querySelectorAll('.square');
+      const status = document.querySelector('#status');
+      const error = document.querySelector('#error');
+
+      let state;
+      let requestPending = false;
+
+      function updatePage(game) {
+        state = game;
+
+        squares.forEach((square) => {
+          const x = Number(square.dataset.x);
+          const y = Number(square.dataset.y);
+          const mark = game.board[y][x];
+          square.textContent = mark.trim();
+          square.disabled = mark !== ' ' || game.winner !== null || requestPending;
+        });
+
+        status.textContent = game.winner
+          ? `${game.winner} wins.`
+          : `Player ${game.next_player}'s turn (${game.next_player === 1 ? game.player1 : game.player2}).`;
+      }
+
+      async function fetchState() {
+        if (requestPending) return;
+
+        try {
+          const response = await fetch('/summarize', {cache: 'no-store'});
+          if (!response.ok) throw new Error('Could not load the game state.');
+          updatePage(await response.json());
+          error.textContent = '';
+        } catch (caught) {
+          error.textContent = caught.message;
+        }
+      }
+
+      async function play(square) {
+        if (!state || requestPending) return;
+
+        requestPending = true;
+        updatePage(state);
+        error.textContent = '';
+
+        try {
+          const params = new URLSearchParams({
+            x: square.dataset.x,
+            y: square.dataset.y,
+            player: state.next_player,
+          });
+          const response = await fetch(`/play?${params}`, {method: 'POST'});
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.detail || 'The move failed.');
+        } catch (caught) {
+          error.textContent = caught.message;
+        } finally {
+          requestPending = false;
+          await fetchState();
+        }
+      }
+
+      squares.forEach((square) => {
+        square.addEventListener('click', () => play(square));
+      });
+
+      fetchState();
+      setInterval(fetchState, 1000);
+    </script>
+  </body>
+</html>

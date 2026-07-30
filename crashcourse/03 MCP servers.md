@@ -692,6 +692,29 @@ Visit http://localhost:8000/docs or http://localhost:8000/redoc or download http
 
 ### Final touch
 
+We came really far in quickly building a minimal TicTacToe game which can be connected to any LLM and play against it. If you would serve that server on the internet you could also connect it to your ChatGPT or Claude app and play from there. The one last thing that is missing is a proper interface. To keep things simple create a folder `static` and add a static webpage to it. As I know nothing about web development or design I will not give any advice here, but feel free to ask your AI to generate you something for your project (that's how I did it). In order to serve it add the following code to your FastAPI app and enjoy your a nice round Tic Tac Toe by visting `http://localhost:8000`:
+
+```python
+from pathlib import Path
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+# ...
+
+static_path = Path(__file__).parent / 'static'
+
+@app.get('/')
+async def root():
+  return FileResponse(static_path / 'index.html')
+
+app.mount('/static', StaticFiles(directory=static_path), name='static')
+```
+
+**<Add celebration emoji here> It works!** ...kinda. With everything you have learned so far you should be able to improve our minimal version. Maybe add a reset button? Maybe add a better solution for polling the game state? Maybe make sure that one can not make moves for the enemy player? But all of that is beyond this workshop's scope and left as an exercise for the reader :)
+
+![Tic Tac Toe](images/03%20tic-tac-toe.png)
+
+
 ## TinyBI 2
 ```opencode
 use the tinybi mcp and figure the most profitable category-city pairs and the least profitable ones and make a final verdict and where to invest and what to drop in order to maximize profits
