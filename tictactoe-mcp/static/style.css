@@ -46,6 +46,25 @@ h1 {
   background: #dcead7;
 }
 
+.reset {
+  border: 2px solid #202020;
+  border-radius: 0.35rem;
+  padding: 0.55rem 1rem;
+  color: inherit;
+  background: #fff;
+  font: 600 1rem/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.reset:not(:disabled):hover,
+.reset:not(:disabled):focus-visible {
+  background: #dcead7;
+}
+
+.reset:disabled {
+  cursor: default;
+}
+
 .error {
   min-height: 1.5rem;
   color: #a32121;

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="TinyBI turns CSV files into clear, useful dashboards.">
+  <title>{{ app_name }} | CSV analytics, instantly</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+  <script src="{{ url_for('static', path='/app.js') }}" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="TinyBI home"><span class="brand-mark">T</span> TinyBI</a>
+    <span class="status"><i></i> Local and private</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="eyebrow">CSV ANALYTICS WORKSPACE</div>
+      <h1>From raw rows to<br><span>clear decisions.</span></h1>
+      <p>Drop in a CSV. TinyBI detects your metrics, dimensions, and dates, then builds a focused dashboard in seconds.</p>
+    </section>
+
+    <section class="upload-shell" id="uploadShell">
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload a CSV file">
+        <input id="fileInput" type="file" accept=".csv,text/csv" hidden>
+        <div class="upload-icon">&#8593;</div>
+        <div><strong>Drop your CSV here</strong><span>or click to browse, up to 15 MB</span></div>
+      </div>
+      <div class="upload-actions">
+        <button class="button secondary" id="sampleButton" type="button">Explore sample data</button>
+        <span>Nothing leaves your machine</span>
+      </div>
+    </section>
+
+    <div class="message error" id="errorMessage" role="alert" hidden></div>
+    <div class="loader" id="loader" hidden><span></span><p>Reading patterns and building your dashboard...</p></div>
+
+    <section class="dashboard" id="dashboard" hidden>
+      <div class="dashboard-heading">
+        <div><span class="kicker">ANALYSIS READY</span><h2 id="datasetName">Your dashboard</h2></div>
+        <button class="button ghost" id="newFileButton" type="button">Analyze another file</button>
+      </div>
+
+      <div class="metrics-grid" id="metricsSection"></div>
+
+      <section class="panel insights-panel" id="insightsSection">
+        <div class="panel-heading"><span>What stands out</span><small>Auto-generated observations</small></div>
+        <div class="insights-grid" id="insightsGrid"></div>
+      </section>
+
+      <div class="charts-grid" id="chartsSection"></div>
+
+      <section class="panel table-panel" id="previewSection">
+        <div class="panel-heading"><span>Data preview</span><small>First 10 rows</small></div>
+        <div class="table-scroll"><table id="previewTable"></table></div>
+      </section>
+    </section>
+  </main>
+
+  <footer>Built for fast exploration. Powered by FastAPI, pandas, and Chart.js.</footer>
+</body>
+</html>

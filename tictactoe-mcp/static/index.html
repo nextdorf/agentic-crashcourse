@@ -21,12 +21,14 @@
         <button class="square" type="button" data-x="1" data-y="2" aria-label="Column 2, row 3"></button>
         <button class="square" type="button" data-x="2" data-y="2" aria-label="Column 3, row 3"></button>
       </div>
+      <button id="reset" class="reset" type="button" disabled>Reset game</button>
       <p id="error" class="error" aria-live="assertive"></p>
     </main>
     <script>
       const squares = document.querySelectorAll('.square');
       const status = document.querySelector('#status');
       const error = document.querySelector('#error');
+      const resetButton = document.querySelector('#reset');
 
       let state;
       let requestPending = false;
@@ -41,6 +43,7 @@
           square.textContent = mark.trim();
           square.disabled = mark !== ' ' || game.winner !== null || requestPending;
         });
+        resetButton.disabled = requestPending;
 
         status.textContent = game.winner
           ? `${game.winner} wins.`
@@ -84,9 +87,29 @@
         }
       }
 
+      async function resetGame() {
+        if (!state || requestPending) return;
+
+        requestPending = true;
+        updatePage(state);
+        error.textContent = '';
+
+        try {
+          const response = await fetch('/reset', {method: 'POST'});
+          if (!response.ok) throw new Error('Could not reset the game.');
+          updatePage(await response.json());
+        } catch (caught) {
+          error.textContent = caught.message;
+        } finally {
+          requestPending = false;
+          await fetchState();
+        }
+      }
+
       squares.forEach((square) => {
         square.addEventListener('click', () => play(square));
       });
+      resetButton.addEventListener('click', resetGame);
 
       fetchState();
       setInterval(fetchState, 1000);

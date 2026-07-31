@@ -142,6 +142,12 @@ async def summarize() -> GameState:
   return GameState(**app.state.game.as_dict())
 
 
+@app.post('/reset')
+async def reset() -> GameState:
+  app.state.game = TicTacToe()
+  return GameState(**app.state.game.as_dict())
+
+
 @app.post('/play')
 async def play(
   x: Annotated[int, Query(description='Column from left to right. 0 is the leftmost column.', ge=0, le=2)],
@@ -155,4 +161,3 @@ async def play(
 
 app.mount('/mcp', mcp_app)
 app.mount('/static', StaticFiles(directory=static_path), name='static')
-
